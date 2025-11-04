@@ -20,6 +20,7 @@ function App() {
   const [summary, setSummary] = useState<string>('');
   const [recordingTime, setRecordingTime] = useState<number>(0);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState<boolean>(false);
+  const [volumeLevels, setVolumeLevels] = useState<number[]>([]);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -30,6 +31,7 @@ function App() {
   const isListeningRef = useRef<boolean>(false);
   const startTimeRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const volumeHistoryRef = useRef<number[]>([]);
 
   // Load YAMNet model on component mount
   useEffect(() => {
@@ -162,6 +164,16 @@ function App() {
       // Get the audio buffer
       const audioData = audioBufferRef.current.slice(0, 15600);
       
+      // Calculate RMS volume for this chunk
+      let sum = 0;
+      for (let i = 0; i < audioData.length; i++) {
+        sum += audioData[i] * audioData[i];
+      }
+      const rms = Math.sqrt(sum / audioData.length);
+      
+      // Store volume level
+      volumeHistoryRef.current.push(rms);
+      
       // Clear the buffer (keep any extra data for next chunk)
       audioBufferRef.current = audioBufferRef.current.slice(15600);
       
@@ -233,6 +245,7 @@ function App() {
     uniqueSounds: number;
     topSounds: Array<{ sound: string; count: number; avgConfidence: string }>;
     categories: string[];
+    noiseMetrics?: { avgVolume: number; peakVolume: number; silencePercent: number };
   }): Promise<string> => {
     console.log('Generating AI-enhanced narrative summary...');
     
@@ -251,29 +264,46 @@ function App() {
     // Analyze acoustic density
     const detectionRate = totalDetections / duration; // sounds per second
     
+    // Determine acoustic environment from noise metrics
+    let acousticEnvironment = '';
+    if (data.noiseMetrics) {
+      const { avgVolume, silencePercent } = data.noiseMetrics;
+      if (avgVolume > 0.15) {
+        acousticEnvironment = 'a remarkably loud environment with intense acoustic energy';
+      } else if (avgVolume > 0.1) {
+        acousticEnvironment = 'a notably loud space with substantial ambient noise';
+      } else if (avgVolume > 0.05) {
+        acousticEnvironment = 'a moderately active acoustic space';
+      } else if (silencePercent > 50) {
+        acousticEnvironment = 'a quiet environment with significant periods of silence';
+      } else {
+        acousticEnvironment = 'a calm acoustic setting';
+      }
+    }
+    
     // Build rich narrative description
     let narrative = '';
     
-    // Opening: Set the scene with vivid language
+    // Opening: Set the scene with vivid language including acoustic environment
     if (hasSpeech && topSound.count >= 5) {
       const intensity = topSound.count > 10 ? 'animated conversation' : 'ongoing dialogue';
-      narrative += `The recording captures ${intensity}, with human voices weaving through the ${duration}-second soundscape. `;
+      narrative += `The recording captures ${intensity} in ${acousticEnvironment}, with human voices weaving through the ${duration}-second soundscape. `;
       
       if (hasDomestic) {
         narrative += `The setting appears to be indoors—a home or office—where everyday sounds like ${data.topSounds.find(s => ['Door', 'Slam', 'Cupboard'].some(d => s.sound.includes(d)))?.sound.toLowerCase() || 'domestic activity'} punctuate the vocal exchange. `;
       }
     } else if (hasMusic) {
-      narrative += `Musical tones fill this ${duration}-second clip, creating a melodic atmosphere that dominates the acoustic space. `;
+      narrative += `Musical tones fill this ${duration}-second clip${acousticEnvironment ? ` in ${acousticEnvironment}` : ''}, creating a melodic atmosphere that dominates the acoustic space. `;
     } else if (hasAnimals && hasNature) {
-      narrative += `This ${duration}-second recording transports us to a natural setting alive with wildlife. `;
+      narrative += `This ${duration}-second recording transports us to a natural setting${acousticEnvironment ? ` characterized by ${acousticEnvironment}` : ''} alive with wildlife. `;
       const animalSounds = data.topSounds.filter(s => hasAnimals && ['Bird', 'Crow', 'Animal', 'Dog', 'Cat'].some(a => s.sound.includes(a)));
       if (animalSounds.length > 0) {
         narrative += `${animalSounds[0].sound} calls ring out ${animalSounds[0].count} times, painting an auditory picture of the outdoors. `;
       }
     } else if (hasMechanical) {
-      narrative += `The mechanical hum of modern life permeates this ${duration}-second segment, suggesting an urban or industrial environment. `;
+      narrative += `The mechanical hum of modern life permeates this ${duration}-second segment${acousticEnvironment ? ` in ${acousticEnvironment}` : ''}, suggesting an urban or industrial environment. `;
     } else {
-      narrative += `Over ${duration} seconds, a tapestry of sounds unfolds, revealing the character of this acoustic moment. `;
+      narrative += `Over ${duration} seconds${acousticEnvironment ? ` in ${acousticEnvironment}` : ''}, a tapestry of sounds unfolds, revealing the character of this acoustic moment. `;
     }
     
     // Middle: Add texture and detail
@@ -373,7 +403,12 @@ function App() {
         totalDetections: detections.length,
         uniqueSounds: soundCounts.size,
         topSounds,
-        categories: Array.from(detectedCategories)
+        categories: Array.from(detectedCategories),
+        noiseMetrics: volumeLevels.length === 5 ? {
+          avgVolume: volumeLevels[0],
+          peakVolume: volumeLevels[1],
+          silencePercent: volumeLevels[3]
+        } : undefined
       });
 
       // Build complete summary
@@ -383,6 +418,25 @@ function App() {
       summaryText += `⏱️ Duration: ~${sessionDuration} seconds\n`;
       summaryText += `🔊 Total Detections: ${detections.length}\n`;
       summaryText += `🎵 Unique Sounds: ${soundCounts.size}\n\n`;
+      
+      // Add noise level metrics
+      if (volumeLevels.length === 5) {
+        const [avgVolume, peakVolume, volumeRange, silencePercent, noiseFloor] = volumeLevels;
+        summaryText += `📊 Noise Level Analysis:\n`;
+        summaryText += `• Average Volume: ${(avgVolume * 100).toFixed(2)}%\n`;
+        summaryText += `• Peak Volume: ${(peakVolume * 100).toFixed(2)}%\n`;
+        summaryText += `• Volume Range: ${(volumeRange * 100).toFixed(2)}%\n`;
+        summaryText += `• Silence: ${silencePercent.toFixed(1)}%\n`;
+        summaryText += `• Noise Floor: ${(noiseFloor * 100).toFixed(2)}%\n`;
+        
+        // Determine environment noise level
+        let noiseLevel = 'Quiet';
+        if (avgVolume > 0.15) noiseLevel = 'Very Loud';
+        else if (avgVolume > 0.1) noiseLevel = 'Loud';
+        else if (avgVolume > 0.05) noiseLevel = 'Moderate';
+        
+        summaryText += `• Environment: ${noiseLevel}\n\n`;
+      }
       
       summaryText += `Most Frequent Sounds:\n`;
       sortedSounds.slice(0, 10).forEach(([sound, count], index) => {
@@ -511,8 +565,32 @@ function App() {
     }
     startTimeRef.current = null;
     
+    // Calculate noise metrics from volume history
+    const volumes = volumeHistoryRef.current;
+    if (volumes.length > 0) {
+      const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+      const peakVolume = Math.max(...volumes);
+      const minVolume = Math.min(...volumes);
+      const volumeRange = peakVolume - minVolume;
+      
+      // Detect silence (volume below threshold)
+      const silenceThreshold = 0.01;
+      const silentSamples = volumes.filter(v => v < silenceThreshold).length;
+      const silencePercent = (silentSamples / volumes.length) * 100;
+      
+      // Calculate noise floor (average of lowest 10% of samples)
+      const sortedVolumes = [...volumes].sort((a, b) => a - b);
+      const noiseFloorSamples = sortedVolumes.slice(0, Math.ceil(sortedVolumes.length * 0.1));
+      const noiseFloor = noiseFloorSamples.reduce((a, b) => a + b, 0) / noiseFloorSamples.length;
+      
+      setVolumeLevels([avgVolume, peakVolume, volumeRange, silencePercent, noiseFloor]);
+    }
+    
     // Generate summary before clearing data
     generateSummary();
+    
+    // Clear volume history
+    volumeHistoryRef.current = [];
     
     // Stop animation frame
     if (animationFrameRef.current) {
@@ -605,6 +683,29 @@ function App() {
           </div>
         )}
       </div>
+
+      {status === 'listening' && volumeHistoryRef.current.length > 0 && (
+        <div className="noise-level-indicator">
+          <div className="noise-label">Noise Level:</div>
+          <div className="noise-meter">
+            <div 
+              className="noise-meter-fill" 
+              style={{ 
+                width: `${Math.min(volumeHistoryRef.current[volumeHistoryRef.current.length - 1] * 500, 100)}%` 
+              }}
+            />
+          </div>
+          <div className="noise-level-text">
+            {(() => {
+              const currentVolume = volumeHistoryRef.current[volumeHistoryRef.current.length - 1] || 0;
+              if (currentVolume > 0.15) return '🔴 Very Loud';
+              if (currentVolume > 0.1) return '🟠 Loud';
+              if (currentVolume > 0.05) return '🟡 Moderate';
+              return '🟢 Quiet';
+            })()}
+          </div>
+        </div>
+      )}
 
       <div className="content-grid">
         <div className="detections-container">

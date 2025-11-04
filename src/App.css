@@ -89,6 +89,50 @@
   }
 }
 
+.noise-level-indicator {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+  margin: 1rem 0;
+  padding: 12px 24px;
+  background: #FFFFFF;
+  border: 1px solid #D9E4ED;
+  border-radius: 4px;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.noise-label {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 17px;
+  color: #888B8D;
+}
+
+.noise-meter {
+  width: 200px;
+  height: 8px;
+  background: #D9E4ED;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.noise-meter-fill {
+  height: 100%;
+  background: linear-gradient(to right, #2E9E4A, #FFE082, #F57C00, #F03434);
+  transition: width 0.3s ease;
+}
+
+.noise-level-text {
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 17px;
+  min-width: 100px;
+  text-align: center;
+}
+
 .start-button {
   background: #1F9AE8;
   color: #FFFFFF;
