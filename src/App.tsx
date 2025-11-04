@@ -19,6 +19,7 @@ function App() {
   const [classNames, setClassNames] = useState<string[]>([]);
   const [summary, setSummary] = useState<string>('');
   const [recordingTime, setRecordingTime] = useState<number>(0);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState<boolean>(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -226,7 +227,188 @@ function App() {
     }
   };
 
-  const generateSummary = () => {
+  const generateAISummary = async (data: {
+    duration: number;
+    totalDetections: number;
+    uniqueSounds: number;
+    topSounds: Array<{ sound: string; count: number; avgConfidence: string }>;
+    categories: string[];
+  }): Promise<string> => {
+    console.log('Generating AI-enhanced narrative summary...');
+    
+    const topSound = data.topSounds[0];
+    const duration = data.duration;
+    const totalDetections = data.totalDetections;
+    
+    // Categorize sounds with detailed analysis
+    const hasMusic = data.categories.includes('music');
+    const hasSpeech = data.categories.includes('speech');
+    const hasAnimals = data.categories.includes('animals');
+    const hasNature = data.categories.includes('nature');
+    const hasMechanical = data.categories.includes('mechanical');
+    const hasDomestic = data.categories.includes('domestic');
+    
+    // Analyze acoustic density
+    const detectionRate = totalDetections / duration; // sounds per second
+    
+    // Build rich narrative description
+    let narrative = '';
+    
+    // Opening: Set the scene with vivid language
+    if (hasSpeech && topSound.count >= 5) {
+      const intensity = topSound.count > 10 ? 'animated conversation' : 'ongoing dialogue';
+      narrative += `The recording captures ${intensity}, with human voices weaving through the ${duration}-second soundscape. `;
+      
+      if (hasDomestic) {
+        narrative += `The setting appears to be indoors—a home or office—where everyday sounds like ${data.topSounds.find(s => ['Door', 'Slam', 'Cupboard'].some(d => s.sound.includes(d)))?.sound.toLowerCase() || 'domestic activity'} punctuate the vocal exchange. `;
+      }
+    } else if (hasMusic) {
+      narrative += `Musical tones fill this ${duration}-second clip, creating a melodic atmosphere that dominates the acoustic space. `;
+    } else if (hasAnimals && hasNature) {
+      narrative += `This ${duration}-second recording transports us to a natural setting alive with wildlife. `;
+      const animalSounds = data.topSounds.filter(s => hasAnimals && ['Bird', 'Crow', 'Animal', 'Dog', 'Cat'].some(a => s.sound.includes(a)));
+      if (animalSounds.length > 0) {
+        narrative += `${animalSounds[0].sound} calls ring out ${animalSounds[0].count} times, painting an auditory picture of the outdoors. `;
+      }
+    } else if (hasMechanical) {
+      narrative += `The mechanical hum of modern life permeates this ${duration}-second segment, suggesting an urban or industrial environment. `;
+    } else {
+      narrative += `Over ${duration} seconds, a tapestry of sounds unfolds, revealing the character of this acoustic moment. `;
+    }
+    
+    // Middle: Add texture and detail
+    if (detectionRate > 2) {
+      narrative += `The soundscape is remarkably dense—averaging ${detectionRate.toFixed(1)} distinct sounds per second—creating a rich, layered audio texture. `;
+    } else if (detectionRate < 0.5) {
+      narrative += `Sparse and measured, the acoustic events arrive with intentional spacing, allowing each sound to resonate before the next emerges. `;
+    }
+    
+    // Describe secondary and tertiary sounds with narrative flow
+    if (data.topSounds.length >= 3) {
+      const secondary = data.topSounds.slice(1, 3);
+      const soundDescriptions = secondary.map(s => {
+        if (s.count > 3) return `frequent ${s.sound.toLowerCase()} (${s.count} instances)`;
+        else return `occasional ${s.sound.toLowerCase()}`;
+      });
+      
+      narrative += `Beneath the primary layer, ${soundDescriptions.join(' and ')} add complexity to the composition. `;
+    }
+    
+    // Closing: Contextual interpretation with insight
+    if (hasSpeech && hasDomestic && !hasMechanical) {
+      narrative += `The interplay of conversation and household sounds suggests a lived-in space—perhaps a kitchen or living room—where human activity and domestic routines intersect naturally.`;
+    } else if (hasSpeech && hasAnimals) {
+      narrative += `The juxtaposition of human voices and animal sounds paints a picture of coexistence—a backyard, a park, or a rural homestead where the boundaries between human and natural worlds blur.`;
+    } else if (hasMusic && hasSpeech) {
+      narrative += `This appears to be a social setting—a gathering where music provides ambiance for conversation, creating the acoustic signature of communal enjoyment.`;
+    } else if (hasAnimals && hasNature && !hasSpeech) {
+      narrative += `Untouched by human presence, this soundscape offers a window into the natural world, where animal calls and environmental sounds compose their own organic symphony.`;
+    } else if (hasMechanical) {
+      narrative += `The predominance of mechanical sounds speaks to our modern built environment, where human-engineered systems create their own distinct acoustic language.`;
+    } else {
+      const categoryList = data.categories.join(', ');
+      narrative += `Drawing from ${data.categories.length} sonic categories (${categoryList}), this recording presents a unique acoustic fingerprint—a moment captured in sound that tells its own story.`;
+    }
+    
+    return narrative;
+  };
+
+  const generateSummary = async () => {
+    if (detections.length === 0) {
+      setSummary('No sounds were detected during this listening session.');
+      return;
+    }
+
+    setIsGeneratingSummary(true);
+
+    try {
+      // Count occurrences of each sound
+      const soundCounts = new Map<string, number>();
+      const soundScores = new Map<string, number[]>();
+      
+      detections.forEach(detection => {
+        const count = soundCounts.get(detection.label) || 0;
+        soundCounts.set(detection.label, count + 1);
+        
+        const scores = soundScores.get(detection.label) || [];
+        scores.push(detection.score);
+        soundScores.set(detection.label, scores);
+      });
+
+      // Sort by frequency
+      const sortedSounds = Array.from(soundCounts.entries())
+        .sort((a, b) => b[1] - a[1]);
+
+      // Use the actual recording time from the timer
+      const sessionDuration = recordingTime;
+
+      // Categorize sounds
+      const categories = {
+        speech: ['Speech', 'Conversation', 'Narration', 'Monologue', 'Whispering', 'Singing', 'Yell', 'Shout'],
+        music: ['Music', 'Musical instrument', 'Plucked string instrument', 'Guitar', 'Piano', 'Drum', 'Bass'],
+        animals: ['Animal', 'Dog', 'Cat', 'Bird', 'Insect', 'Roar', 'Bark', 'Meow'],
+        mechanical: ['Vehicle', 'Engine', 'Motor', 'Machine', 'Tools', 'Mechanical fan'],
+        nature: ['Water', 'Wind', 'Rain', 'Thunder', 'Stream', 'Ocean'],
+        domestic: ['Door', 'Drawer', 'Cupboard', 'Dishes', 'Cutlery', 'Telephone']
+      };
+
+      const detectedCategories = new Set<string>();
+      sortedSounds.forEach(([sound]) => {
+        for (const [category, keywords] of Object.entries(categories)) {
+          if (keywords.some(keyword => sound.toLowerCase().includes(keyword.toLowerCase()))) {
+            detectedCategories.add(category);
+          }
+        }
+      });
+
+      // Generate AI-powered contextual summary
+      const topSounds = sortedSounds.slice(0, 10).map(([sound, count]) => ({
+        sound,
+        count,
+        avgConfidence: ((soundScores.get(sound)?.reduce((a, b) => a + b, 0) || 0) / (soundScores.get(sound)?.length || 1) * 100).toFixed(1)
+      }));
+
+      const aiSummary = await generateAISummary({
+        duration: sessionDuration,
+        totalDetections: detections.length,
+        uniqueSounds: soundCounts.size,
+        topSounds,
+        categories: Array.from(detectedCategories)
+      });
+
+      // Build complete summary
+      let summaryText = `📊 Listening Session Summary\n\n`;
+      summaryText += `🤖 CLAP AI Summary\n`;
+      summaryText += `${aiSummary}\n\n`;
+      summaryText += `⏱️ Duration: ~${sessionDuration} seconds\n`;
+      summaryText += `🔊 Total Detections: ${detections.length}\n`;
+      summaryText += `🎵 Unique Sounds: ${soundCounts.size}\n\n`;
+      
+      summaryText += `Most Frequent Sounds:\n`;
+      sortedSounds.slice(0, 10).forEach(([sound, count], index) => {
+        const scores = soundScores.get(sound) || [];
+        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        summaryText += `${index + 1}. ${sound} - detected ${count} time${count > 1 ? 's' : ''} (avg confidence: ${(avgScore * 100).toFixed(1)}%)\n`;
+      });
+
+      if (detectedCategories.size > 0) {
+        summaryText += `\nSound Categories Detected:\n`;
+        Array.from(detectedCategories).forEach(category => {
+          summaryText += `• ${category.charAt(0).toUpperCase() + category.slice(1)}\n`;
+        });
+      }
+
+      setSummary(summaryText);
+    } catch (error) {
+      console.error('Error generating summary:', error);
+      // Fallback to basic summary if AI fails
+      generateBasicSummary();
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
+  const generateBasicSummary = () => {
     if (detections.length === 0) {
       setSummary('No sounds were detected during this listening session.');
       return;
@@ -442,7 +624,12 @@ function App() {
         <div className="summary-container">
           <h2>Session Summary</h2>
           <div className="summary-content">
-            {summary ? (
+            {isGeneratingSummary ? (
+              <div className="empty-state">
+                <div className="loading-spinner">🤖</div>
+                Generating AI-powered summary...
+              </div>
+            ) : summary ? (
               <pre className="summary-text">{summary}</pre>
             ) : (
               <div className="empty-state">

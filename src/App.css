@@ -226,6 +226,21 @@
   padding: 2rem;
 }
 
+.loading-spinner {
+  font-size: 2em;
+  animation: spin 2s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 .info-box {
   margin-top: 2rem;
   padding: 1.5rem;
