@@ -10,8 +10,8 @@
 }
 
 .logo {
-  width: 71px;
-  height: 43px;
+  width: 250px;
+  height: 80px;
   margin-bottom: 1.5rem;
   background: #FFFFFF;
   border: 1px solid #D9E4ED;
@@ -20,6 +20,7 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
+  padding: 10px;
 }
 
 .header {
@@ -248,7 +249,7 @@
   border-radius: 4px;
   padding: 1.5rem;
   min-height: 300px;
-  max-height: 500px;
+  max-height: 700px;
   overflow-y: auto;
   box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
 }

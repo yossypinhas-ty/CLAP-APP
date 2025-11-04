@@ -649,8 +649,23 @@ function App() {
   return (
     <div className="app">
       <div className="logo">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M24.4331 24.5029C23.3198 24.5029 22.5498 23.7329 22.5498 22.6196V8.29541C22.5498 7.17285 23.3198 6.40283 24.4331 6.40283C25.5649 6.40283 26.3257 7.17285 26.3257 8.29541V22.6196C26.3257 23.7329 25.5649 24.5029 24.4331 24.5029ZM12.8179 19.9292V11.0508C15.2114 10.791 18.6997 9.99316 21.2788 8.73145V22.2393C18.7275 20.9868 15.4434 20.2168 12.8179 19.9292ZM9.55225 19.9199C7.01953 19.9199 5.66504 18.5933 5.66504 16.1626V14.8081C5.66504 12.3682 7.01953 11.0508 9.55225 11.0508H11.5469V19.9199H9.55225ZM13.2446 26.2007C12.1685 26.2007 11.5933 25.5977 11.1294 24.5864L9.5708 21.1816C9.86768 21.1816 10.1553 21.2002 10.3223 21.2002C12.6694 21.2651 13.7178 21.3486 14.4229 21.4692L14.9424 23.9648C15.2393 25.3936 14.395 26.2007 13.2446 26.2007Z" fill="#2E9E4A"/>
+        <svg width="250" height="80" viewBox="0 0 250 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Star outline */}
+          <path d="M40 5 L47 28 L70 28 L52 42 L59 65 L40 50 L21 65 L28 42 L10 28 L33 28 Z" 
+                stroke="black" 
+                strokeWidth="3" 
+                fill="none"
+                strokeLinejoin="miter"/>
+          {/* Starkey text */}
+          <text x="80" y="50" fontFamily="Arial, sans-serif" fontSize="32" fontWeight="bold" fill="black">
+            Starkey
+          </text>
+          {/* Swoosh under star */}
+          <path d="M 15 68 Q 35 72, 55 68" 
+                stroke="black" 
+                strokeWidth="2.5" 
+                fill="none"
+                strokeLinecap="round"/>
         </svg>
       </div>
       <header className="header">
