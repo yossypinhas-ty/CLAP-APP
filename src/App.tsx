@@ -20,7 +20,6 @@ function App() {
   const [summary, setSummary] = useState<string>('');
   const [recordingTime, setRecordingTime] = useState<number>(0);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState<boolean>(false);
-  const [volumeLevels, setVolumeLevels] = useState<number[]>([]);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -343,7 +342,7 @@ function App() {
     return narrative;
   };
 
-  const generateSummary = async () => {
+  const generateSummary = async (noiseMetrics: number[] | null = null) => {
     if (detections.length === 0) {
       setSummary('No sounds were detected during this listening session.');
       return;
@@ -404,10 +403,10 @@ function App() {
         uniqueSounds: soundCounts.size,
         topSounds,
         categories: Array.from(detectedCategories),
-        noiseMetrics: volumeLevels.length === 5 ? {
-          avgVolume: volumeLevels[0],
-          peakVolume: volumeLevels[1],
-          silencePercent: volumeLevels[3]
+        noiseMetrics: noiseMetrics && noiseMetrics.length === 5 ? {
+          avgVolume: noiseMetrics[0],
+          peakVolume: noiseMetrics[1],
+          silencePercent: noiseMetrics[3]
         } : undefined
       });
 
@@ -420,8 +419,8 @@ function App() {
       summaryText += `🎵 Unique Sounds: ${soundCounts.size}\n\n`;
       
       // Add noise level metrics
-      if (volumeLevels.length === 5) {
-        const [avgVolume, peakVolume, volumeRange, silencePercent, noiseFloor] = volumeLevels;
+      if (noiseMetrics && noiseMetrics.length === 5) {
+        const [avgVolume, peakVolume, volumeRange, silencePercent, noiseFloor] = noiseMetrics;
         summaryText += `📊 Noise Level Analysis:\n`;
         summaryText += `• Average Volume: ${(avgVolume * 100).toFixed(2)}%\n`;
         summaryText += `• Peak Volume: ${(peakVolume * 100).toFixed(2)}%\n`;
@@ -566,6 +565,7 @@ function App() {
     startTimeRef.current = null;
     
     // Calculate noise metrics from volume history
+    let calculatedMetrics: number[] | null = null;
     const volumes = volumeHistoryRef.current;
     if (volumes.length > 0) {
       const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
@@ -583,11 +583,11 @@ function App() {
       const noiseFloorSamples = sortedVolumes.slice(0, Math.ceil(sortedVolumes.length * 0.1));
       const noiseFloor = noiseFloorSamples.reduce((a, b) => a + b, 0) / noiseFloorSamples.length;
       
-      setVolumeLevels([avgVolume, peakVolume, volumeRange, silencePercent, noiseFloor]);
+      calculatedMetrics = [avgVolume, peakVolume, volumeRange, silencePercent, noiseFloor];
     }
     
-    // Generate summary before clearing data
-    generateSummary();
+    // Generate summary with calculated metrics
+    generateSummary(calculatedMetrics);
     
     // Clear volume history
     volumeHistoryRef.current = [];
