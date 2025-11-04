@@ -249,10 +249,8 @@ function App() {
     const sortedSounds = Array.from(soundCounts.entries())
       .sort((a, b) => b[1] - a[1]);
 
-    // Calculate session duration (approximate based on detections)
-    const sessionDuration = detections.length > 0 
-      ? Math.round((detections[0].timestamp.getTime() - detections[detections.length - 1].timestamp.getTime()) / 1000)
-      : 0;
+    // Use the actual recording time from the timer
+    const sessionDuration = recordingTime;
 
     // Categorize sounds
     const categories = {
