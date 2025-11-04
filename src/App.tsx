@@ -649,25 +649,31 @@ function App() {
   return (
     <div className="app">
       <div className="logo">
-        <svg width="250" height="80" viewBox="0 0 250 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Star outline */}
-          <path d="M40 5 L47 28 L70 28 L52 42 L59 65 L40 50 L21 65 L28 42 L10 28 L33 28 Z" 
-                stroke="black" 
-                strokeWidth="3" 
+        <svg viewBox="0 0 540 200" xmlns="http://www.w3.org/2000/svg">
+          {/* Star outline - more accurate shape */}
+          <path d="M 120 80 L 180 80 L 210 20 L 240 80 L 300 80 L 250 120 L 270 180 L 210 140 L 150 180 L 170 120 L 120 80 Z" 
                 fill="none"
+                stroke="black" 
+                strokeWidth="4" 
                 strokeLinejoin="miter"/>
+          
+          {/* Top horizontal line extending from star */}
+          <line x1="300" y1="80" x2="520" y2="80" stroke="black" strokeWidth="4"/>
+          
           {/* Starkey text */}
-          <text x="80" y="50" fontFamily="Arial, sans-serif" fontSize="32" fontWeight="bold" fill="black">
+          <text x="315" y="150" fontFamily="Arial, Helvetica, sans-serif" fontSize="75" fontWeight="700" fill="black">
             Starkey
           </text>
-          {/* Swoosh under star */}
-          <path d="M 15 68 Q 35 72, 55 68" 
+          
+          {/* Swoosh curve under the star */}
+          <path d="M 140 185 Q 190 195, 260 185" 
                 stroke="black" 
-                strokeWidth="2.5" 
+                strokeWidth="5" 
                 fill="none"
                 strokeLinecap="round"/>
         </svg>
       </div>
+      <p className="logo-subtitle">Advanced Technology & Features - Research Tool</p>
       <header className="header">
         <h1> CLAP vs. YAMNet Audio Detector</h1>
         <p>AI-powered real-time sound detection and analysis</p>
