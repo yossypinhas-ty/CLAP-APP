@@ -110,34 +110,38 @@ function App() {
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, width, height);
         
-        // Draw Y-axis labels (dBSPL) on the left
+        // Define drawing area (leave space at bottom for frequency labels)
+        const bottomMargin = 25; // Space for frequency labels
+        const drawHeight = height - bottomMargin;
+        const leftMargin = 45;
+        const drawWidth = width - leftMargin;
+        
+        // Draw Y-axis labels (dBSPL) on the left - properly scaled
         ctx.fillStyle = '#888B8D';
         ctx.font = '10px Inter, sans-serif';
         ctx.textAlign = 'right';
         
-        // dBSPL scale (assuming -90 to -10 dB range from analyser settings)
+        // dBSPL scale (matching -90 to -10 dB range from analyser settings)
         const dbLabels = [
-          { db: -10, y: 10 },
-          { db: -30, y: height * 0.25 },
-          { db: -50, y: height * 0.5 },
-          { db: -70, y: height * 0.75 },
-          { db: -90, y: height - 10 }
+          { db: -10, y: 0 },
+          { db: -30, y: drawHeight * 0.25 },
+          { db: -50, y: drawHeight * 0.5 },
+          { db: -70, y: drawHeight * 0.75 },
+          { db: -90, y: drawHeight }
         ];
         
         dbLabels.forEach(({ db, y }) => {
-          ctx.fillText(`${db} dB`, 35, y + 3);
+          ctx.fillText(`${db} dB`, 35, y + 4);
           // Draw horizontal grid line
           ctx.strokeStyle = '#E0E0E0';
           ctx.lineWidth = 0.5;
           ctx.beginPath();
-          ctx.moveTo(40, y);
+          ctx.moveTo(leftMargin, y);
           ctx.lineTo(width, y);
           ctx.stroke();
         });
         
         // Draw frequency bars with logarithmic spacing
-        const leftMargin = 45;
-        const drawWidth = width - leftMargin;
         const maxValue = Math.max(...spectrumData, 1); // Avoid division by zero
         
         // Use logarithmic scale for frequency distribution
@@ -156,13 +160,13 @@ function App() {
           
           // Normalize and amplify the values for better visualization
           const normalizedValue = value / maxValue;
-          const barHeight = Math.max(normalizedValue * height, value > 0 ? 2 : 0); // Minimum 2px if there's any value
+          const barHeight = Math.max(normalizedValue * drawHeight, value > 0 ? 2 : 0); // Minimum 2px if there's any value
           const barWidth = drawWidth / spectrumData.length;
           const x = leftMargin + (normalizedPos * drawWidth);
-          const y = height - barHeight;
+          const y = drawHeight - barHeight;
           
           // Gradient from blue to light blue
-          const gradient = ctx.createLinearGradient(0, height, 0, 0);
+          const gradient = ctx.createLinearGradient(0, drawHeight, 0, 0);
           gradient.addColorStop(0, '#1F9AE8');
           gradient.addColorStop(1, '#5CB8F0');
           
@@ -190,7 +194,7 @@ function App() {
           const logFreq = Math.log10(freq);
           const normalizedPos = (logFreq - logMin) / (logMax - logMin);
           const x = leftMargin + (normalizedPos * drawWidth);
-          ctx.fillText(label, x, height + 15);
+          ctx.fillText(label, x, drawHeight + 15);
         });
         
         console.log('Spectrum drawn successfully');
@@ -952,7 +956,7 @@ function App() {
                     <canvas 
                       ref={canvasRef}
                       width={600}
-                      height={200}
+                      height={230}
                       className="spectrum-canvas"
                     />
                   </div>
