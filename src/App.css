@@ -10,9 +10,8 @@
 }
 
 .logo {
-  width: 270px;
-  height: 70px;
-  margin-bottom: 1.5rem;
+  width: 180px;
+  height: 50px;
   background: #FFFFFF;
   border: 1px solid #D9E4ED;
   border-radius: 4px;
@@ -20,7 +19,7 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
-  padding: 10px 15px;
+  padding: 8px 12px;
 }
 
 .logo svg {
@@ -28,36 +27,52 @@
   height: 100%;
 }
 
+.logo-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
 .logo-subtitle {
   font-family: 'Inter', sans-serif;
   font-weight: 400;
-  font-size: 14px;
-  line-height: 17px;
+  font-size: 10px;
+  line-height: 12px;
   color: #888B8D;
-  margin-top: -1rem;
-  margin-bottom: 1.5rem;
   text-align: left;
+  margin: 0;
 }
 
 .header {
   margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
 }
 
-.header h1 {
+.header-content {
+  flex: 1;
+}
+
+.header-content h1 {
   font-family: 'Inter', sans-serif;
   font-weight: 600;
   font-size: 32px;
   line-height: 39px;
   margin-bottom: 0.5rem;
   color: #1F9AE8;
+  margin-top: 0;
 }
 
-.header p {
+.header-content p {
   font-family: 'Inter', sans-serif;
   font-weight: 400;
   font-size: 16px;
   line-height: 24px;
   color: #888B8D;
+  margin: 0.25rem 0;
 }
 
 .controls {
@@ -279,6 +294,31 @@
   word-wrap: break-word;
   color: #000000;
   margin: 0;
+}
+
+.spectrum-container {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #FDFDFD;
+  border: 1px solid #D9E4ED;
+  border-radius: 4px;
+}
+
+.spectrum-title {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 17px;
+  color: #1F9AE8;
+  margin: 0 0 1rem 0;
+}
+
+.spectrum-canvas {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  background: #FFFFFF;
+  border: 1px solid #D9E4ED;
 }
 
 .content-grid {

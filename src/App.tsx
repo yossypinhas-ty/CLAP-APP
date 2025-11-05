@@ -20,6 +20,7 @@ function App() {
   const [summary, setSummary] = useState<string>('');
   const [recordingTime, setRecordingTime] = useState<number>(0);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState<boolean>(false);
+  const [spectrumData, setSpectrumData] = useState<number[]>([]);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -31,6 +32,7 @@ function App() {
   const startTimeRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const volumeHistoryRef = useRef<number[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Load YAMNet model on component mount
   useEffect(() => {
@@ -74,6 +76,48 @@ function App() {
     };
   }, []);
 
+  // Draw frequency spectrum when data is available
+  useEffect(() => {
+    if (spectrumData.length > 0 && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const width = canvas.width;
+      const height = canvas.height;
+      
+      // Clear canvas
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      
+      // Draw frequency bars
+      const barWidth = width / spectrumData.length;
+      
+      spectrumData.forEach((value, index) => {
+        const barHeight = (value / 255) * height;
+        const x = index * barWidth;
+        const y = height - barHeight;
+        
+        // Gradient from blue to light blue
+        const gradient = ctx.createLinearGradient(0, height, 0, 0);
+        gradient.addColorStop(0, '#1F9AE8');
+        gradient.addColorStop(1, '#5CB8F0');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, y, barWidth - 1, barHeight);
+      });
+      
+      // Draw frequency labels
+      ctx.fillStyle = '#888B8D';
+      ctx.font = '10px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      
+      ctx.fillText('0 Hz', 10, height - 5);
+      ctx.fillText('4 kHz', width / 2, height - 5);
+      ctx.fillText('8 kHz', width - 20, height - 5);
+    }
+  }, [spectrumData]);
+
   const startListening = async () => {
     if (!model || !classNames.length) {
       setError('Model not loaded yet');
@@ -83,6 +127,7 @@ function App() {
     try {
       setStatus('loading');
       setError('');
+      setSpectrumData([]); // Clear previous spectrum data
 
       // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -100,6 +145,11 @@ function App() {
       audioContextRef.current = audioContext;
 
       const source = audioContext.createMediaStreamSource(stream);
+      
+      // Create analyser for frequency spectrum
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      analyserRef.current = analyser;
       
       // Use ScriptProcessorNode to capture audio data
       const bufferSize = 4096;
@@ -129,6 +179,7 @@ function App() {
         }
       };
 
+      source.connect(analyser);
       source.connect(processor);
       processor.connect(audioContext.destination);
 
@@ -586,6 +637,14 @@ function App() {
       calculatedMetrics = [avgVolume, peakVolume, volumeRange, silencePercent, noiseFloor];
     }
     
+    // Capture frequency spectrum snapshot
+    if (analyserRef.current) {
+      const bufferLength = analyserRef.current.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      analyserRef.current.getByteFrequencyData(dataArray);
+      setSpectrumData(Array.from(dataArray));
+    }
+    
     // Generate summary with calculated metrics
     generateSummary(calculatedMetrics);
     
@@ -648,35 +707,39 @@ function App() {
 
   return (
     <div className="app">
-      <div className="logo">
-        <svg viewBox="0 0 540 200" xmlns="http://www.w3.org/2000/svg">
-          {/* Star outline - more accurate shape */}
-          <path d="M 120 80 L 180 80 L 210 20 L 240 80 L 300 80 L 250 120 L 270 180 L 210 140 L 150 180 L 170 120 L 120 80 Z" 
-                fill="none"
-                stroke="black" 
-                strokeWidth="4" 
-                strokeLinejoin="miter"/>
-          
-          {/* Top horizontal line extending from star */}
-          <line x1="300" y1="80" x2="520" y2="80" stroke="black" strokeWidth="4"/>
-          
-          {/* Starkey text */}
-          <text x="315" y="150" fontFamily="Arial, Helvetica, sans-serif" fontSize="75" fontWeight="700" fill="black">
-            Starkey
-          </text>
-          
-          {/* Swoosh curve under the star */}
-          <path d="M 140 185 Q 190 195, 260 185" 
-                stroke="black" 
-                strokeWidth="5" 
-                fill="none"
-                strokeLinecap="round"/>
-        </svg>
-      </div>
-      <p className="logo-subtitle">Advanced Technology & Features - Research Tool</p>
       <header className="header">
-        <h1> CLAP vs. YAMNet Audio Detector</h1>
-        <p>AI-powered real-time sound detection and analysis</p>
+        <div className="logo-wrapper">
+          <div className="logo">
+            <svg viewBox="0 0 540 200" xmlns="http://www.w3.org/2000/svg">
+              {/* Star outline - more accurate shape */}
+              <path d="M 120 80 L 180 80 L 210 20 L 240 80 L 300 80 L 250 120 L 270 180 L 210 140 L 150 180 L 170 120 L 120 80 Z" 
+                    fill="none"
+                    stroke="black" 
+                    strokeWidth="4" 
+                    strokeLinejoin="miter"/>
+              
+              {/* Top horizontal line extending from star */}
+              <line x1="300" y1="80" x2="520" y2="80" stroke="black" strokeWidth="4"/>
+              
+              {/* Starkey text */}
+              <text x="315" y="150" fontFamily="Arial, Helvetica, sans-serif" fontSize="75" fontWeight="700" fill="black">
+                Starkey
+              </text>
+              
+              {/* Swoosh curve under the star */}
+              <path d="M 140 185 Q 190 195, 260 185" 
+                    stroke="black" 
+                    strokeWidth="5" 
+                    fill="none"
+                    strokeLinecap="round"/>
+            </svg>
+          </div>
+          <p className="logo-subtitle">Advanced Technology & Features - Research Tool</p>
+        </div>
+        <div className="header-content">
+          <h1>CLAP vs. YAMNet Audio Detector</h1>
+          <p>AI-powered real-time sound detection and analysis</p>
+        </div>
       </header>
 
       <div className={`status ${status}`}>
@@ -764,7 +827,20 @@ function App() {
                 Generating AI-powered summary...
               </div>
             ) : summary ? (
-              <pre className="summary-text">{summary}</pre>
+              <>
+                {spectrumData.length > 0 && (
+                  <div className="spectrum-container">
+                    <h3 className="spectrum-title">📊 Frequency Spectrum</h3>
+                    <canvas 
+                      ref={canvasRef}
+                      width={600}
+                      height={200}
+                      className="spectrum-canvas"
+                    />
+                  </div>
+                )}
+                <pre className="summary-text">{summary}</pre>
+              </>
             ) : (
               <div className="empty-state">
                 Summary will appear here after you stop listening.
