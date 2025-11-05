@@ -105,6 +105,9 @@ function App() {
         const height = canvas.height;
         
         console.log('Canvas dimensions for drawing:', width, 'x', height);
+        console.log('Spectrum data to draw:', spectrumData.length, 'values');
+        console.log('Sample spectrum values:', spectrumData.slice(0, 10));
+        console.log('Max spectrum value:', Math.max(...spectrumData));
       
         // Clear canvas
         ctx.fillStyle = '#FFFFFF';
@@ -146,32 +149,37 @@ function App() {
         
         // Use logarithmic scale for frequency distribution
         // Sample rate is 16kHz, so max frequency is 8kHz
-        // We'll map the 128 bins logarithmically
-        const minFreq = 20; // 20 Hz
-        const maxFreq = 8000; // 8 kHz
+        // We'll map the 128 bins logarithmically from 100Hz to 10kHz
+        const minFreq = 100; // 100 Hz
+        const maxFreq = 10000; // 10 kHz
         const logMin = Math.log10(minFreq);
         const logMax = Math.log10(maxFreq);
+        
+        console.log('Drawing bars, max value:', maxValue, 'data length:', spectrumData.length);
         
         spectrumData.forEach((value, index) => {
           // Calculate logarithmic position
           const freq = (index / spectrumData.length) * maxFreq;
-          const logFreq = freq < minFreq ? logMin : Math.log10(freq);
+          const logFreq = freq < minFreq ? logMin : Math.log10(Math.max(freq, minFreq));
           const normalizedPos = (logFreq - logMin) / (logMax - logMin);
           
           // Normalize and amplify the values for better visualization
           const normalizedValue = value / maxValue;
           const barHeight = Math.max(normalizedValue * drawHeight, value > 0 ? 2 : 0); // Minimum 2px if there's any value
-          const barWidth = drawWidth / spectrumData.length;
+          const barWidth = Math.max((drawWidth / spectrumData.length) * 1.5, 2); // Minimum 2px width
           const x = leftMargin + (normalizedPos * drawWidth);
           const y = drawHeight - barHeight;
           
-          // Gradient from blue to light blue
-          const gradient = ctx.createLinearGradient(0, drawHeight, 0, 0);
-          gradient.addColorStop(0, '#1F9AE8');
-          gradient.addColorStop(1, '#5CB8F0');
-          
-          ctx.fillStyle = gradient;
-          ctx.fillRect(x, y, barWidth, barHeight);
+          // Only draw if we have a visible value
+          if (barHeight > 0) {
+            // Gradient from blue to light blue
+            const gradient = ctx.createLinearGradient(0, drawHeight, 0, 0);
+            gradient.addColorStop(0, '#1F9AE8');
+            gradient.addColorStop(1, '#5CB8F0');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x, y, barWidth, barHeight);
+          }
         });
         
         // Draw frequency labels below the chart (logarithmic scale)
@@ -179,15 +187,15 @@ function App() {
         ctx.font = '10px Inter, sans-serif';
         ctx.textAlign = 'center';
         
-        // Logarithmic frequency labels
+        // Logarithmic frequency labels (100 Hz to 10 kHz)
         const freqLabels = [
-          { freq: 20, label: '20 Hz' },
           { freq: 100, label: '100 Hz' },
+          { freq: 200, label: '200 Hz' },
           { freq: 500, label: '500 Hz' },
           { freq: 1000, label: '1 kHz' },
           { freq: 2000, label: '2 kHz' },
-          { freq: 4000, label: '4 kHz' },
-          { freq: 8000, label: '8 kHz' }
+          { freq: 5000, label: '5 kHz' },
+          { freq: 10000, label: '10 kHz' }
         ];
         
         freqLabels.forEach(({ freq, label }) => {
