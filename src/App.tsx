@@ -148,19 +148,26 @@ function App() {
         const maxValue = Math.max(...spectrumData, 1); // Avoid division by zero
         
         // Use logarithmic scale for frequency distribution
-        // Sample rate is 16kHz, so max frequency is 8kHz
-        // We'll map the 128 bins logarithmically from 100Hz to 10kHz
+        // Sample rate is 16kHz, so actual max frequency is 8kHz (Nyquist)
+        // But we'll display the range as 100Hz to 10kHz for visualization
         const minFreq = 100; // 100 Hz
-        const maxFreq = 10000; // 10 kHz
+        const maxFreq = 10000; // 10 kHz (display range)
+        const actualMaxFreq = 8000; // 8 kHz (actual Nyquist limit)
         const logMin = Math.log10(minFreq);
         const logMax = Math.log10(maxFreq);
         
         console.log('Drawing bars, max value:', maxValue, 'data length:', spectrumData.length);
         
         spectrumData.forEach((value, index) => {
-          // Calculate logarithmic position
-          const freq = (index / spectrumData.length) * maxFreq;
-          const logFreq = freq < minFreq ? logMin : Math.log10(Math.max(freq, minFreq));
+          // Calculate actual frequency for this bin (up to 8kHz)
+          const actualFreq = (index / spectrumData.length) * actualMaxFreq;
+          
+          // Skip frequencies below our display range
+          if (actualFreq < minFreq) return;
+          
+          // Map to display range (100Hz to 10kHz) even though data only goes to 8kHz
+          const displayFreq = Math.min(actualFreq, maxFreq);
+          const logFreq = Math.log10(displayFreq);
           const normalizedPos = (logFreq - logMin) / (logMax - logMin);
           
           // Normalize and amplify the values for better visualization
