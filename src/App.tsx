@@ -33,6 +33,7 @@ function App() {
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const volumeHistoryRef = useRef<number[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const spectrumSnapshotsRef = useRef<Uint8Array[]>([]);
 
   // Load YAMNet model on component mount
   useEffect(() => {
@@ -79,82 +80,123 @@ function App() {
   // Draw frequency spectrum when data is available
   useEffect(() => {
     console.log('Spectrum useEffect triggered, data length:', spectrumData.length);
+    console.log('Canvas ref current:', canvasRef.current);
     
-    if (spectrumData.length > 0 && canvasRef.current) {
-      console.log('Drawing spectrum...');
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        console.log('No canvas context');
-        return;
-      }
+    if (spectrumData.length > 0) {
+      // Use a small timeout to ensure canvas is in DOM
+      const timer = setTimeout(() => {
+        if (!canvasRef.current) {
+          console.log('Canvas ref still not available after timeout');
+          return;
+        }
+        
+        console.log('Drawing spectrum...');
+        const canvas = canvasRef.current;
+        console.log('Canvas element:', canvas);
+        console.log('Canvas width attr:', canvas.width, 'height attr:', canvas.height);
+        const ctx = canvas.getContext('2d');
+        console.log('Canvas context:', ctx);
+        if (!ctx) {
+          console.log('No canvas context');
+          return;
+        }
 
-      const width = canvas.width;
-      const height = canvas.height;
-      
-      console.log('Canvas dimensions:', width, 'x', height);
-      
-      // Clear canvas
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, width, height);
-      
-      // Draw Y-axis labels (dBSPL) on the left
-      ctx.fillStyle = '#888B8D';
-      ctx.font = '10px Inter, sans-serif';
-      ctx.textAlign = 'right';
-      
-      // dBSPL scale (assuming -90 to -10 dB range from analyser settings)
-      const dbLabels = [
-        { db: -10, y: 10 },
-        { db: -30, y: height * 0.25 },
-        { db: -50, y: height * 0.5 },
-        { db: -70, y: height * 0.75 },
-        { db: -90, y: height - 10 }
-      ];
-      
-      dbLabels.forEach(({ db, y }) => {
-        ctx.fillText(`${db} dB`, 35, y + 3);
-        // Draw horizontal grid line
-        ctx.strokeStyle = '#E0E0E0';
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(40, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-      });
-      
-      // Draw frequency bars (offset from left to make room for Y-axis labels)
-      const leftMargin = 45;
-      const drawWidth = width - leftMargin;
-      const barWidth = drawWidth / spectrumData.length;
-      const maxValue = Math.max(...spectrumData, 1); // Avoid division by zero
-      
-      spectrumData.forEach((value, index) => {
-        // Normalize and amplify the values for better visualization
-        const normalizedValue = value / maxValue;
-        const barHeight = Math.max(normalizedValue * height, value > 0 ? 2 : 0); // Minimum 2px if there's any value
-        const x = leftMargin + (index * barWidth);
-        const y = height - barHeight;
+        const width = canvas.width;
+        const height = canvas.height;
         
-        // Gradient from blue to light blue
-        const gradient = ctx.createLinearGradient(0, height, 0, 0);
-        gradient.addColorStop(0, '#1F9AE8');
-        gradient.addColorStop(1, '#5CB8F0');
+        console.log('Canvas dimensions for drawing:', width, 'x', height);
+      
+        // Clear canvas
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
         
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x, y, barWidth - 1, barHeight);
-      });
+        // Draw Y-axis labels (dBSPL) on the left
+        ctx.fillStyle = '#888B8D';
+        ctx.font = '10px Inter, sans-serif';
+        ctx.textAlign = 'right';
+        
+        // dBSPL scale (assuming -90 to -10 dB range from analyser settings)
+        const dbLabels = [
+          { db: -10, y: 10 },
+          { db: -30, y: height * 0.25 },
+          { db: -50, y: height * 0.5 },
+          { db: -70, y: height * 0.75 },
+          { db: -90, y: height - 10 }
+        ];
+        
+        dbLabels.forEach(({ db, y }) => {
+          ctx.fillText(`${db} dB`, 35, y + 3);
+          // Draw horizontal grid line
+          ctx.strokeStyle = '#E0E0E0';
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(40, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+        });
+        
+        // Draw frequency bars with logarithmic spacing
+        const leftMargin = 45;
+        const drawWidth = width - leftMargin;
+        const maxValue = Math.max(...spectrumData, 1); // Avoid division by zero
+        
+        // Use logarithmic scale for frequency distribution
+        // Sample rate is 16kHz, so max frequency is 8kHz
+        // We'll map the 128 bins logarithmically
+        const minFreq = 20; // 20 Hz
+        const maxFreq = 8000; // 8 kHz
+        const logMin = Math.log10(minFreq);
+        const logMax = Math.log10(maxFreq);
+        
+        spectrumData.forEach((value, index) => {
+          // Calculate logarithmic position
+          const freq = (index / spectrumData.length) * maxFreq;
+          const logFreq = freq < minFreq ? logMin : Math.log10(freq);
+          const normalizedPos = (logFreq - logMin) / (logMax - logMin);
+          
+          // Normalize and amplify the values for better visualization
+          const normalizedValue = value / maxValue;
+          const barHeight = Math.max(normalizedValue * height, value > 0 ? 2 : 0); // Minimum 2px if there's any value
+          const barWidth = drawWidth / spectrumData.length;
+          const x = leftMargin + (normalizedPos * drawWidth);
+          const y = height - barHeight;
+          
+          // Gradient from blue to light blue
+          const gradient = ctx.createLinearGradient(0, height, 0, 0);
+          gradient.addColorStop(0, '#1F9AE8');
+          gradient.addColorStop(1, '#5CB8F0');
+          
+          ctx.fillStyle = gradient;
+          ctx.fillRect(x, y, barWidth, barHeight);
+        });
+        
+        // Draw frequency labels below the chart (logarithmic scale)
+        ctx.fillStyle = '#888B8D';
+        ctx.font = '10px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        
+        // Logarithmic frequency labels
+        const freqLabels = [
+          { freq: 20, label: '20 Hz' },
+          { freq: 100, label: '100 Hz' },
+          { freq: 500, label: '500 Hz' },
+          { freq: 1000, label: '1 kHz' },
+          { freq: 2000, label: '2 kHz' },
+          { freq: 4000, label: '4 kHz' },
+          { freq: 8000, label: '8 kHz' }
+        ];
+        
+        freqLabels.forEach(({ freq, label }) => {
+          const logFreq = Math.log10(freq);
+          const normalizedPos = (logFreq - logMin) / (logMax - logMin);
+          const x = leftMargin + (normalizedPos * drawWidth);
+          ctx.fillText(label, x, height + 15);
+        });
+        
+        console.log('Spectrum drawn successfully');
+      }, 100); // 100ms delay
       
-      // Draw frequency labels at bottom
-      ctx.fillStyle = '#888B8D';
-      ctx.font = '10px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      
-      ctx.fillText('0 Hz', leftMargin + 10, height - 5);
-      ctx.fillText('4 kHz', leftMargin + drawWidth / 2, height - 5);
-      ctx.fillText('8 kHz', width - 20, height - 5);
-      
-      console.log('Spectrum drawn successfully');
+      return () => clearTimeout(timer);
     }
   }, [spectrumData]);
 
@@ -168,6 +210,7 @@ function App() {
       setStatus('loading');
       setError('');
       setSpectrumData([]); // Clear previous spectrum data
+      spectrumSnapshotsRef.current = []; // Clear spectrum snapshots
 
       // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -207,6 +250,14 @@ function App() {
         const hasSound = Array.from(inputData).some(sample => Math.abs(sample) > 0.01);
         if (hasSound) {
           console.log('Audio detected, buffer size:', currentBuffer.length);
+          
+          // Capture spectrum snapshot periodically (every 10th time we have sound)
+          if (analyserRef.current && spectrumSnapshotsRef.current.length < 50 && Math.random() < 0.1) {
+            const bufferLength = analyserRef.current.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyserRef.current.getByteFrequencyData(dataArray);
+            spectrumSnapshotsRef.current.push(dataArray);
+          }
         }
         
         // Append new audio data to buffer
@@ -651,6 +702,38 @@ function App() {
     // Stop listening flag
     isListeningRef.current = false;
     
+    // Process captured spectrum snapshots
+    if (spectrumSnapshotsRef.current.length > 0) {
+      console.log('Processing', spectrumSnapshotsRef.current.length, 'spectrum snapshots');
+      
+      // Average all captured snapshots for a smooth representation
+      const bufferLength = spectrumSnapshotsRef.current[0].length;
+      const averaged = new Float32Array(bufferLength);
+      
+      spectrumSnapshotsRef.current.forEach(snapshot => {
+        for (let i = 0; i < bufferLength; i++) {
+          averaged[i] += snapshot[i];
+        }
+      });
+      
+      for (let i = 0; i < bufferLength; i++) {
+        averaged[i] /= spectrumSnapshotsRef.current.length;
+      }
+      
+      // Use first 128 bins for display
+      const displayData = Array.from(averaged.slice(0, 128));
+      console.log('Averaged spectrum data:', displayData.length, 'bins');
+      console.log('Sample values:', displayData.slice(0, 10));
+      console.log('Max value:', Math.max(...displayData));
+      console.log('Non-zero values:', displayData.filter(v => v > 0).length);
+      setSpectrumData(displayData);
+      
+      // Clear snapshots for next recording
+      spectrumSnapshotsRef.current = [];
+    } else {
+      console.log('No spectrum snapshots captured');
+    }
+    
     // Stop timer
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
@@ -678,22 +761,6 @@ function App() {
       const noiseFloor = noiseFloorSamples.reduce((a, b) => a + b, 0) / noiseFloorSamples.length;
       
       calculatedMetrics = [avgVolume, peakVolume, volumeRange, silencePercent, noiseFloor];
-    }
-    
-    // Capture frequency spectrum snapshot (single fast capture)
-    if (analyserRef.current) {
-      const bufferLength = analyserRef.current.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      analyserRef.current.getByteFrequencyData(dataArray);
-      
-      // Use only lower frequency bins (first 128) for better visualization
-      const displayData = Array.from(dataArray.slice(0, 128));
-      console.log('Spectrum data captured:', displayData.length, 'bins');
-      console.log('Sample values:', displayData.slice(0, 10));
-      console.log('Max value:', Math.max(...displayData));
-      setSpectrumData(displayData);
-    } else {
-      console.log('No analyser available');
     }
     
     // Generate summary with calculated metrics
