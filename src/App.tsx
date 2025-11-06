@@ -7,12 +7,14 @@ interface Detection {
   label: string;
   score: number;
   timestamp: Date;
+  volume: number;
 }
 
 interface SoundFrequency {
   sound: string;
   count: number;
   avgConfidence: number;
+  avgVolume: number;
 }
 
 type Status = 'idle' | 'loading' | 'listening' | 'error';
@@ -384,6 +386,7 @@ function App() {
       console.log('Top 10 predictions:', predictions.slice(0, 10));
 
       // Filter predictions with confidence > 0.2 and get top 5
+      const currentVolume = volumeHistoryRef.current[volumeHistoryRef.current.length - 1] || 0;
       const topPredictions = predictions
         .filter(p => p.score > 0.2)
         .slice(0, 5)
@@ -392,6 +395,7 @@ function App() {
           label: p.name,
           score: p.score,
           timestamp: new Date(),
+          volume: currentVolume,
         }));
 
       if (topPredictions.length > 0) {
@@ -525,6 +529,7 @@ function App() {
       // Count occurrences of each sound
       const soundCounts = new Map<string, number>();
       const soundScores = new Map<string, number[]>();
+      const soundVolumes = new Map<string, number[]>();
       
       detections.forEach(detection => {
         const count = soundCounts.get(detection.label) || 0;
@@ -533,6 +538,10 @@ function App() {
         const scores = soundScores.get(detection.label) || [];
         scores.push(detection.score);
         soundScores.set(detection.label, scores);
+        
+        const volumes = soundVolumes.get(detection.label) || [];
+        volumes.push(detection.volume);
+        soundVolumes.set(detection.label, volumes);
       });
 
       // Sort by frequency
@@ -613,12 +622,15 @@ function App() {
       sortedSounds.slice(0, 10).forEach(([sound, count], index) => {
         const scores = soundScores.get(sound) || [];
         const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        const volumes = soundVolumes.get(sound) || [];
+        const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
         summaryText += `${index + 1}. ${sound} - detected ${count} time${count > 1 ? 's' : ''} (avg confidence: ${(avgScore * 100).toFixed(1)}%)\n`;
         
         frequentSoundsData.push({
           sound,
           count,
-          avgConfidence: avgScore * 100
+          avgConfidence: avgScore * 100,
+          avgVolume: avgVolume * 100
         });
       });
       
@@ -650,6 +662,7 @@ function App() {
     // Count occurrences of each sound
     const soundCounts = new Map<string, number>();
     const soundScores = new Map<string, number[]>();
+    const soundVolumes = new Map<string, number[]>();
     
     detections.forEach(detection => {
       const count = soundCounts.get(detection.label) || 0;
@@ -658,6 +671,10 @@ function App() {
       const scores = soundScores.get(detection.label) || [];
       scores.push(detection.score);
       soundScores.set(detection.label, scores);
+      
+      const volumes = soundVolumes.get(detection.label) || [];
+      volumes.push(detection.volume);
+      soundVolumes.set(detection.label, volumes);
     });
 
     // Sort by frequency
@@ -721,12 +738,15 @@ function App() {
     sortedSounds.slice(0, 10).forEach(([sound, count], index) => {
       const scores = soundScores.get(sound) || [];
       const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+      const volumes = soundVolumes.get(sound) || [];
+      const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
       summaryText += `${index + 1}. ${sound} - detected ${count} time${count > 1 ? 's' : ''} (avg confidence: ${(avgScore * 100).toFixed(1)}%)\n`;
       
       frequentSoundsData.push({
         sound,
         count,
-        avgConfidence: avgScore * 100
+        avgConfidence: avgScore * 100,
+        avgVolume: avgVolume * 100
       });
     });
     
@@ -980,7 +1000,9 @@ function App() {
                           <div key={index} className="bar-item">
                             <div className="bar-label">
                               <span className="sound-name">{item.sound}</span>
-                              <span className="sound-stats">{item.count}× • {item.avgConfidence.toFixed(1)}%</span>
+                              <span className="sound-stats">
+                                {item.count}× • {item.avgConfidence.toFixed(1)}% • Vol: {item.avgVolume.toFixed(1)}%
+                              </span>
                             </div>
                             <div className="bar-background">
                               <div 
@@ -994,6 +1016,10 @@ function App() {
                         );
                       })}
                     </div>
+                    <p className="chart-note">
+                      <strong>Note:</strong> Volume (Vol) represents the average microphone input level (0-100%) when each sound was detected, 
+                      indicating the relative loudness captured during recording.
+                    </p>
                   </div>
                 )}
                 {spectrumData.length > 0 && (
