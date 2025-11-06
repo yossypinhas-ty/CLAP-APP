@@ -9,6 +9,12 @@ interface Detection {
   timestamp: Date;
 }
 
+interface SoundFrequency {
+  sound: string;
+  count: number;
+  avgConfidence: number;
+}
+
 type Status = 'idle' | 'loading' | 'listening' | 'error';
 
 function App() {
@@ -21,6 +27,7 @@ function App() {
   const [recordingTime, setRecordingTime] = useState<number>(0);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState<boolean>(false);
   const [spectrumData, setSpectrumData] = useState<number[]>([]);
+  const [frequentSounds, setFrequentSounds] = useState<SoundFrequency[]>([]);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -602,11 +609,20 @@ function App() {
       }
       
       summaryText += `Most Frequent Sounds:\n`;
+      const frequentSoundsData: SoundFrequency[] = [];
       sortedSounds.slice(0, 10).forEach(([sound, count], index) => {
         const scores = soundScores.get(sound) || [];
         const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
         summaryText += `${index + 1}. ${sound} - detected ${count} time${count > 1 ? 's' : ''} (avg confidence: ${(avgScore * 100).toFixed(1)}%)\n`;
+        
+        frequentSoundsData.push({
+          sound,
+          count,
+          avgConfidence: avgScore * 100
+        });
       });
+      
+      setFrequentSounds(frequentSoundsData);
 
       if (detectedCategories.size > 0) {
         summaryText += `\nSound Categories Detected:\n`;
@@ -701,11 +717,20 @@ function App() {
     summaryText += `🎵 Unique Sounds: ${soundCounts.size}\n\n`;
     
     summaryText += `Most Frequent Sounds:\n`;
+    const frequentSoundsData: SoundFrequency[] = [];
     sortedSounds.slice(0, 10).forEach(([sound, count], index) => {
       const scores = soundScores.get(sound) || [];
       const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
       summaryText += `${index + 1}. ${sound} - detected ${count} time${count > 1 ? 's' : ''} (avg confidence: ${(avgScore * 100).toFixed(1)}%)\n`;
+      
+      frequentSoundsData.push({
+        sound,
+        count,
+        avgConfidence: avgScore * 100
+      });
     });
+    
+    setFrequentSounds(frequentSoundsData);
 
     if (detectedCategories.size > 0) {
       summaryText += `\nSound Categories Detected:\n`;
@@ -943,6 +968,34 @@ function App() {
               </div>
             ) : summary ? (
               <>
+                {frequentSounds.length > 0 && (
+                  <div className="sound-chart-container">
+                    <h3 className="chart-title">🎵 Most Frequent Sounds</h3>
+                    <div className="horizontal-bar-chart">
+                      {frequentSounds.slice(0, 5).map((item, index) => {
+                        const maxCount = Math.max(...frequentSounds.map(s => s.count));
+                        const barWidth = (item.count / maxCount) * 100;
+                        
+                        return (
+                          <div key={index} className="bar-item">
+                            <div className="bar-label">
+                              <span className="sound-name">{item.sound}</span>
+                              <span className="sound-stats">{item.count}× • {item.avgConfidence.toFixed(1)}%</span>
+                            </div>
+                            <div className="bar-background">
+                              <div 
+                                className="bar-fill" 
+                                style={{ width: `${barWidth}%` }}
+                              >
+                                <span className="bar-count">{item.count}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {spectrumData.length > 0 && (
                   <div className="spectrum-container">
                     <h3 className="spectrum-title">📊 Frequency Spectrum</h3>

@@ -297,6 +297,82 @@
   margin: 0;
 }
 
+.sound-chart-container {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #FDFDFD;
+  border: 1px solid #D9E4ED;
+  border-radius: 4px;
+}
+
+.chart-title {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 17px;
+  color: #1F9AE8;
+  margin: 0 0 1rem 0;
+}
+
+.horizontal-bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bar-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+}
+
+.sound-name {
+  font-weight: 600;
+  color: #000000;
+}
+
+.sound-stats {
+  font-weight: 400;
+  color: #888B8D;
+  font-size: 11px;
+}
+
+.bar-background {
+  width: 100%;
+  height: 32px;
+  background: #F5F5F5;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1F9AE8 0%, #5CB8F0 100%);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  min-width: 40px;
+  transition: width 0.5s ease-out;
+}
+
+.bar-count {
+  color: #FFFFFF;
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+}
+
 .spectrum-container {
   margin-bottom: 1.5rem;
   padding: 1rem;
