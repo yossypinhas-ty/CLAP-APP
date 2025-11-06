@@ -847,29 +847,7 @@ function App() {
       <header className="header">
         <div className="logo-wrapper">
           <div className="logo">
-            <svg viewBox="0 0 540 200" xmlns="http://www.w3.org/2000/svg">
-              {/* Star outline - more accurate shape */}
-              <path d="M 120 80 L 180 80 L 210 20 L 240 80 L 300 80 L 250 120 L 270 180 L 210 140 L 150 180 L 170 120 L 120 80 Z" 
-                    fill="none"
-                    stroke="black" 
-                    strokeWidth="4" 
-                    strokeLinejoin="miter"/>
-              
-              {/* Top horizontal line extending from star */}
-              <line x1="300" y1="80" x2="520" y2="80" stroke="black" strokeWidth="4"/>
-              
-              {/* Starkey text */}
-              <text x="315" y="150" fontFamily="Arial, Helvetica, sans-serif" fontSize="75" fontWeight="700" fill="black">
-                Starkey
-              </text>
-              
-              {/* Swoosh curve under the star */}
-              <path d="M 140 185 Q 190 195, 260 185" 
-                    stroke="black" 
-                    strokeWidth="5" 
-                    fill="none"
-                    strokeLinecap="round"/>
-            </svg>
+            <img src="/starkey-logo.png" alt="Starkey" />
           </div>
           <p className="logo-subtitle">Advanced Technology & Features - Research Tool</p>
         </div>
