@@ -8,6 +8,7 @@ interface Detection {
   score: number;
   timestamp: Date;
   volume: number;
+  dominantFrequency: number;
 }
 
 interface SoundFrequency {
@@ -15,6 +16,7 @@ interface SoundFrequency {
   count: number;
   avgConfidence: number;
   avgVolume: number;
+  avgFrequency: number;
 }
 
 type Status = 'idle' | 'loading' | 'listening' | 'error';
@@ -346,6 +348,28 @@ function App() {
       // Store volume level
       volumeHistoryRef.current.push(rms);
       
+      // Get dominant frequency from analyser
+      let dominantFreq = 0;
+      if (analyserRef.current) {
+        const bufferLength = analyserRef.current.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        analyserRef.current.getByteFrequencyData(dataArray);
+        
+        // Find the frequency bin with the highest magnitude
+        let maxMagnitude = 0;
+        let maxIndex = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          if (dataArray[i] > maxMagnitude) {
+            maxMagnitude = dataArray[i];
+            maxIndex = i;
+          }
+        }
+        
+        // Convert bin index to frequency (assuming 16kHz sample rate)
+        const sampleRate = audioContextRef.current?.sampleRate || 16000;
+        dominantFreq = Math.round((maxIndex * sampleRate) / (bufferLength * 2));
+      }
+      
       // Clear the buffer (keep any extra data for next chunk)
       audioBufferRef.current = audioBufferRef.current.slice(15600);
       
@@ -396,6 +420,7 @@ function App() {
           score: p.score,
           timestamp: new Date(),
           volume: currentVolume,
+          dominantFrequency: dominantFreq,
         }));
 
       if (topPredictions.length > 0) {
@@ -530,6 +555,7 @@ function App() {
       const soundCounts = new Map<string, number>();
       const soundScores = new Map<string, number[]>();
       const soundVolumes = new Map<string, number[]>();
+      const soundFrequencies = new Map<string, number[]>();
       
       detections.forEach(detection => {
         const count = soundCounts.get(detection.label) || 0;
@@ -542,6 +568,10 @@ function App() {
         const volumes = soundVolumes.get(detection.label) || [];
         volumes.push(detection.volume);
         soundVolumes.set(detection.label, volumes);
+        
+        const frequencies = soundFrequencies.get(detection.label) || [];
+        frequencies.push(detection.dominantFrequency);
+        soundFrequencies.set(detection.label, frequencies);
       });
 
       // Sort by frequency
@@ -624,13 +654,16 @@ function App() {
         const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
         const volumes = soundVolumes.get(sound) || [];
         const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+        const frequencies = soundFrequencies.get(sound) || [];
+        const avgFrequency = frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
         summaryText += `${index + 1}. ${sound} - detected ${count} time${count > 1 ? 's' : ''} (avg confidence: ${(avgScore * 100).toFixed(1)}%)\n`;
         
         frequentSoundsData.push({
           sound,
           count,
           avgConfidence: avgScore * 100,
-          avgVolume: avgVolume * 100
+          avgVolume: avgVolume * 100,
+          avgFrequency: Math.round(avgFrequency)
         });
       });
       
@@ -663,6 +696,7 @@ function App() {
     const soundCounts = new Map<string, number>();
     const soundScores = new Map<string, number[]>();
     const soundVolumes = new Map<string, number[]>();
+    const soundFrequencies = new Map<string, number[]>();
     
     detections.forEach(detection => {
       const count = soundCounts.get(detection.label) || 0;
@@ -675,6 +709,10 @@ function App() {
       const volumes = soundVolumes.get(detection.label) || [];
       volumes.push(detection.volume);
       soundVolumes.set(detection.label, volumes);
+      
+      const frequencies = soundFrequencies.get(detection.label) || [];
+      frequencies.push(detection.dominantFrequency);
+      soundFrequencies.set(detection.label, frequencies);
     });
 
     // Sort by frequency
@@ -740,13 +778,16 @@ function App() {
       const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
       const volumes = soundVolumes.get(sound) || [];
       const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+      const frequencies = soundFrequencies.get(sound) || [];
+      const avgFrequency = frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
       summaryText += `${index + 1}. ${sound} - detected ${count} time${count > 1 ? 's' : ''} (avg confidence: ${(avgScore * 100).toFixed(1)}%)\n`;
       
       frequentSoundsData.push({
         sound,
         count,
         avgConfidence: avgScore * 100,
-        avgVolume: avgVolume * 100
+        avgVolume: avgVolume * 100,
+        avgFrequency: Math.round(avgFrequency)
       });
     });
     
@@ -1001,7 +1042,7 @@ function App() {
                             <div className="bar-label">
                               <span className="sound-name">{item.sound}</span>
                               <span className="sound-stats">
-                                {item.count}× • {item.avgConfidence.toFixed(1)}% • Vol: {item.avgVolume.toFixed(1)}%
+                                {item.count}× • {item.avgConfidence.toFixed(1)}% • Vol: {item.avgVolume.toFixed(1)}% • {item.avgFrequency} Hz
                               </span>
                             </div>
                             <div className="bar-background">
@@ -1017,8 +1058,8 @@ function App() {
                       })}
                     </div>
                     <p className="chart-note">
-                      <strong>Note:</strong> Volume (Vol) represents the average microphone input level (0-100%) when each sound was detected, 
-                      indicating the relative loudness captured during recording.
+                      <strong>Note:</strong> Volume (Vol) represents the average microphone input level (0-100%) when each sound was detected. 
+                      Frequency (Hz) shows the dominant frequency component of the sound, indicating its pitch or tonal characteristics.
                     </p>
                   </div>
                 )}
