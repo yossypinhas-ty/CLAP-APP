@@ -957,7 +957,28 @@ function App() {
         timestamp: d.timestamp.toISOString()
       })),
       summary: summary,
-      spectrumAvailable: spectrumData.length > 0
+      frequencySpectrum: spectrumData.length > 0 ? {
+        available: true,
+        description: 'Averaged frequency spectrum from 100Hz to 10kHz (128 bins)',
+        frequencyRange: '100 Hz - 10000 Hz',
+        resolution: '128 bins',
+        scale: 'logarithmic',
+        unit: 'dBSPL',
+        data: spectrumData.map((value, index) => {
+          // Calculate frequency for each bin (logarithmic scale)
+          const minFreq = 100;
+          const maxFreq = 10000;
+          const frequency = Math.round(minFreq * Math.pow(maxFreq / minFreq, index / (spectrumData.length - 1)));
+          return {
+            bin: index,
+            frequency: frequency + ' Hz',
+            magnitude: value.toFixed(2)
+          };
+        })
+      } : {
+        available: false,
+        data: []
+      }
     };
 
     // Create filename with timestamp

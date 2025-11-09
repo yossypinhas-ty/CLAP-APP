@@ -55,7 +55,36 @@ Example: `acoustic-session-2025-11-09T11-45-30.json`
     }
   ],
   "summary": "Full text summary of the session...",
-  "spectrumAvailable": true
+  "frequencySpectrum": {
+    "available": true,
+    "description": "Averaged frequency spectrum from 100Hz to 10kHz (128 bins)",
+    "frequencyRange": "100 Hz - 10000 Hz",
+    "resolution": "128 bins",
+    "scale": "logarithmic",
+    "unit": "dBSPL",
+    "data": [
+      {
+        "bin": 0,
+        "frequency": "100 Hz",
+        "magnitude": "-65.32"
+      },
+      {
+        "bin": 1,
+        "frequency": "108 Hz",
+        "magnitude": "-62.45"
+      },
+      {
+        "bin": 64,
+        "frequency": "1000 Hz",
+        "magnitude": "-45.20"
+      },
+      {
+        "bin": 127,
+        "frequency": "10000 Hz",
+        "magnitude": "-78.50"
+      }
+    ]
+  }
 }
 ```
 
@@ -91,6 +120,25 @@ Complete chronological list of every detection:
 - **volume**: Volume level at detection (%)
 - **frequency**: Dominant frequency at detection (Hz)
 - **timestamp**: Exact time of detection (ISO 8601)
+
+### Frequency Spectrum
+Averaged frequency spectrum data (only if session was recorded):
+- **available**: Boolean indicating if spectrum data is present
+- **description**: Description of the spectrum data
+- **frequencyRange**: Frequency range covered (100 Hz - 10000 Hz)
+- **resolution**: Number of frequency bins (128)
+- **scale**: Scale type (logarithmic)
+- **unit**: Measurement unit (dBSPL)
+- **data**: Array of 128 data points, each containing:
+  - **bin**: Bin index (0-127)
+  - **frequency**: Frequency in Hz (logarithmic spacing)
+  - **magnitude**: Magnitude in dBSPL
+
+The spectrum data represents the averaged frequency content across the entire recording session, useful for:
+- Identifying dominant frequency ranges
+- Characterizing acoustic signature of environment
+- Comparing spectral profiles between locations
+- Detecting resonances or frequency-specific issues
 
 ## Use Cases
 
@@ -157,6 +205,7 @@ You can analyze the JSON files using:
 ```python
 import json
 import pandas as pd
+import matplotlib.pyplot as plt
 
 # Load session
 with open('acoustic-session-2025-11-09T11-45-30.json', 'r') as f:
@@ -166,10 +215,61 @@ with open('acoustic-session-2025-11-09T11-45-30.json', 'r') as f:
 detections_df = pd.DataFrame(session['allDetections'])
 frequent_df = pd.DataFrame(session['frequentSounds'])
 
-# Analysis
+# Basic analysis
 print(f"Total duration: {session['metadata']['duration']}s")
 print(f"Average volume: {session['acousticEnvironment']['averageVolume']}")
 print(f"Top 3 sounds: {frequent_df['sound'].head(3).tolist()}")
+
+# Plot frequency spectrum
+if session['frequencySpectrum']['available']:
+    spectrum_df = pd.DataFrame(session['frequencySpectrum']['data'])
+    
+    # Extract numeric values
+    spectrum_df['freq_hz'] = spectrum_df['frequency'].str.extract('(\d+)').astype(int)
+    spectrum_df['magnitude_db'] = spectrum_df['magnitude'].astype(float)
+    
+    # Plot
+    plt.figure(figsize=(12, 6))
+    plt.plot(spectrum_df['freq_hz'], spectrum_df['magnitude_db'], linewidth=2)
+    plt.xscale('log')
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Magnitude (dBSPL)')
+    plt.title(f"Frequency Spectrum - {session['metadata']['userNotes']}")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig('spectrum_plot.png', dpi=150)
+    plt.show()
+
+# Compare multiple sessions
+import glob
+
+sessions = []
+for file in glob.glob('data/*/*.json'):
+    with open(file, 'r') as f:
+        sessions.append(json.load(f))
+
+# Extract average volumes
+comparison = pd.DataFrame([{
+    'location': s['metadata']['userNotes'],
+    'avg_volume': float(s['acousticEnvironment']['averageVolume'].rstrip('%')),
+    'peak_volume': float(s['acousticEnvironment']['peakVolume'].rstrip('%')),
+    'unique_sounds': s['metadata']['uniqueSounds']
+} for s in sessions])
+
+print(comparison)
+```
+
+### Example Spectrum Analysis in Excel
+1. Open Excel → Data → Get Data → From File → From JSON
+2. Select your acoustic-session JSON file
+3. In Power Query Editor:
+   - Navigate to frequencySpectrum → data
+   - Convert to Table
+   - Expand columns
+4. Create a scatter plot with:
+   - X-axis: frequency (convert to number)
+   - Y-axis: magnitude
+5. Format X-axis as logarithmic scale
 ```
 
 ## Privacy & Security
