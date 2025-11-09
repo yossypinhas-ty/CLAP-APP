@@ -240,8 +240,15 @@ function App() {
     try {
       setStatus('loading');
       setError('');
-      setSpectrumData([]); // Clear previous spectrum data
-      spectrumSnapshotsRef.current = []; // Clear spectrum snapshots
+      
+      // Clear previous session data
+      setDetections([]);
+      setSummary('');
+      setSpectrumData([]);
+      setFrequentSounds([]);
+      setUserNotes('');
+      spectrumSnapshotsRef.current = [];
+      volumeHistoryRef.current = [];
 
       // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ 
