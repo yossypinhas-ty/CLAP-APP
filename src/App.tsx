@@ -32,6 +32,7 @@ function App() {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState<boolean>(false);
   const [spectrumData, setSpectrumData] = useState<number[]>([]);
   const [frequentSounds, setFrequentSounds] = useState<SoundFrequency[]>([]);
+  const [userNotes, setUserNotes] = useState<string>('');
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -908,6 +909,78 @@ function App() {
     console.log('Audio capture stopped');
   };
 
+  const saveSession = () => {
+    if (detections.length === 0) {
+      alert('No data to save. Please record a session first.');
+      return;
+    }
+
+    // Calculate noise metrics from volume history
+    const volumes = volumeHistoryRef.current.length > 0 ? volumeHistoryRef.current : [0];
+    const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+    const peakVolume = Math.max(...volumes);
+    const volumeRange = peakVolume - Math.min(...volumes);
+    const silentFrames = volumes.filter(v => v < 0.01).length;
+    const silencePercent = (silentFrames / volumes.length) * 100;
+    const noiseFloor = volumes.filter(v => v > 0).sort((a, b) => a - b)[Math.floor(volumes.length * 0.1)] || 0;
+
+    // Prepare session data
+    const sessionData = {
+      metadata: {
+        timestamp: new Date().toISOString(),
+        date: new Date().toLocaleDateString(),
+        time: new Date().toLocaleTimeString(),
+        duration: recordingTime,
+        totalDetections: detections.length,
+        uniqueSounds: new Set(detections.map(d => d.label)).size,
+        userNotes: userNotes.trim() || 'No notes provided'
+      },
+      acousticEnvironment: {
+        averageVolume: (avgVolume * 100).toFixed(2) + '%',
+        peakVolume: (peakVolume * 100).toFixed(2) + '%',
+        volumeRange: (volumeRange * 100).toFixed(2) + '%',
+        silencePercentage: silencePercent.toFixed(2) + '%',
+        noiseFloor: (noiseFloor * 100).toFixed(2) + '%'
+      },
+      frequentSounds: frequentSounds.map(item => ({
+        sound: item.sound,
+        detectionCount: item.count,
+        avgConfidence: item.avgConfidence.toFixed(1) + '%',
+        avgVolume: item.avgVolume.toFixed(1) + '%',
+        avgFrequency: item.avgFrequency + ' Hz'
+      })),
+      allDetections: detections.map(d => ({
+        sound: d.label,
+        confidence: (d.score * 100).toFixed(1) + '%',
+        volume: (d.volume * 100).toFixed(1) + '%',
+        frequency: d.dominantFrequency + ' Hz',
+        timestamp: d.timestamp.toISOString()
+      })),
+      summary: summary,
+      spectrumAvailable: spectrumData.length > 0
+    };
+
+    // Create filename with timestamp
+    const filename = `acoustic-session-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)}.json`;
+
+    // Convert to JSON and create blob
+    const jsonString = JSON.stringify(sessionData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+
+    // Create download link
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    console.log('Session saved:', filename);
+    alert(`Session saved as ${filename}`);
+  };
+
   const getStatusMessage = () => {
     switch (status) {
       case 'loading':
@@ -967,6 +1040,24 @@ function App() {
             ⏱️ {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
           </div>
         )}
+        <div className="save-controls">
+          <input
+            type="text"
+            className="notes-input"
+            placeholder="Add notes about this acoustic environment..."
+            value={userNotes}
+            onChange={(e) => setUserNotes(e.target.value)}
+            disabled={status === 'listening' || detections.length === 0}
+          />
+          <button
+            className="save-button"
+            onClick={saveSession}
+            disabled={status === 'listening' || detections.length === 0}
+            title="Save session data as JSON file"
+          >
+            💾 Save Session
+          </button>
+        </div>
       </div>
 
       {status === 'listening' && volumeHistoryRef.current.length > 0 && (
