@@ -21,6 +21,15 @@ interface SoundFrequency {
 
 type Status = 'idle' | 'loading' | 'listening' | 'error';
 
+// Predefined label categories for acoustic environment classification
+const LABEL_CATEGORIES = {
+  environment: ['Office', 'Conference Room', 'Cafeteria', 'Laboratory', 'Manufacturing Floor', 'Outdoor', 'Home', 'Vehicle', 'Public Space', 'Classroom'],
+  noiseLevel: ['Quiet', 'Moderate', 'Noisy', 'Very Loud'],
+  activity: ['Meeting', 'Individual Work', 'Group Discussion', 'Manufacturing', 'Testing', 'Break Time', 'Transit', 'Event'],
+  timeContext: ['Morning', 'Afternoon', 'Evening', 'Weekend', 'Peak Hours', 'Off Hours'],
+  conditions: ['HVAC On', 'HVAC Off', 'Windows Open', 'Windows Closed', 'Music Playing', 'Construction Nearby', 'High Traffic', 'Equipment Running']
+};
+
 function App() {
   const [status, setStatus] = useState<Status>('idle');
   const [detections, setDetections] = useState<Detection[]>([]);
@@ -33,6 +42,9 @@ function App() {
   const [spectrumData, setSpectrumData] = useState<number[]>([]);
   const [frequentSounds, setFrequentSounds] = useState<SoundFrequency[]>([]);
   const [userNotes, setUserNotes] = useState<string>('');
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [isLabelToolbarExpanded, setIsLabelToolbarExpanded] = useState<boolean>(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -231,6 +243,19 @@ function App() {
     }
   }, [spectrumData]);
 
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.dropdown-container')) {
+        setExpandedCategories(new Set());
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const startListening = async () => {
     if (!model || !classNames.length) {
       setError('Model not loaded yet');
@@ -247,6 +272,7 @@ function App() {
       setSpectrumData([]);
       setFrequentSounds([]);
       setUserNotes('');
+      setSelectedLabels([]);
       spectrumSnapshotsRef.current = [];
       volumeHistoryRef.current = [];
 
@@ -916,6 +942,26 @@ function App() {
     console.log('Audio capture stopped');
   };
 
+  const toggleCategory = (categoryKey: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(categoryKey)) {
+        newSet.delete(categoryKey);
+      } else {
+        newSet.add(categoryKey);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleLabel = (label: string) => {
+    setSelectedLabels(prev => 
+      prev.includes(label) 
+        ? prev.filter(l => l !== label)
+        : [...prev, label]
+    );
+  };
+
   const saveSession = () => {
     if (detections.length === 0) {
       alert('No data to save. Please record a session first.');
@@ -940,7 +986,8 @@ function App() {
         duration: recordingTime,
         totalDetections: detections.length,
         uniqueSounds: new Set(detections.map(d => d.label)).size,
-        userNotes: userNotes.trim() || 'No notes provided'
+        userNotes: userNotes.trim() || 'No notes provided',
+        labels: selectedLabels
       },
       acousticEnvironment: {
         averageVolume: (avgVolume * 100).toFixed(2) + '%',
@@ -1068,6 +1115,70 @@ function App() {
             ⏱️ {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
           </div>
         )}
+      </div>
+
+      {/* Label Toolbar - Always Visible */}
+      <div className="label-toolbar">
+        <button 
+          className="label-toolbar-toggle"
+          onClick={() => setIsLabelToolbarExpanded(!isLabelToolbarExpanded)}
+        >
+          <span className="toolbar-title">🏷️ Tag Session for ML Training</span>
+          <span className="toolbar-arrow">{isLabelToolbarExpanded ? '▲' : '▼'}</span>
+        </button>
+        
+        {isLabelToolbarExpanded && (
+          <div className="label-toolbar-content">
+            {Object.entries(LABEL_CATEGORIES).map(([categoryKey, labels]) => {
+              const isExpanded = expandedCategories.has(categoryKey);
+              const selectedInCategory = labels.filter(label => selectedLabels.includes(label));
+              
+              const categoryName = categoryKey.charAt(0).toUpperCase() + categoryKey.slice(1).replace(/([A-Z])/g, ' $1');
+              const displayText = selectedInCategory.length > 0 
+                ? `${categoryName}: ${selectedInCategory.join(', ')}`
+                : categoryName;
+              
+              return (
+                <div key={categoryKey} className="dropdown-container">
+                  <button 
+                    className={`dropdown-button ${selectedInCategory.length > 0 ? 'has-selection' : ''}`}
+                    onClick={() => toggleCategory(categoryKey)}
+                    disabled={status === 'listening'}
+                  >
+                    {selectedInCategory.length > 0 ? (
+                      <span className="dropdown-text">
+                        <span className="category-label">{categoryName}: </span>
+                        <span className="selected-labels">{selectedInCategory.join(', ')}</span>
+                      </span>
+                    ) : (
+                      <span className="dropdown-text">{displayText}</span>
+                    )}
+                    <span className="dropdown-arrow">▼</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="dropdown-menu">
+                      <div className="dropdown-items">
+                        {labels.map((label) => (
+                          <div
+                            key={label}
+                            className={`dropdown-item ${selectedLabels.includes(label) ? 'selected' : ''}`}
+                            onClick={() => toggleLabel(label)}
+                          >
+                            <span className="checkbox">{selectedLabels.includes(label) ? '✓' : ''}</span>
+                            <span>{label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="controls">
         <div className="save-controls">
           <input
             type="text"
