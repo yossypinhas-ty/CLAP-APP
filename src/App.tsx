@@ -45,6 +45,9 @@ function App() {
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [isLabelToolbarExpanded, setIsLabelToolbarExpanded] = useState<boolean>(false);
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+  const [aiDescription, setAiDescription] = useState<string>('');
+  const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -273,6 +276,7 @@ function App() {
       setFrequentSounds([]);
       setUserNotes('');
       setSelectedLabels([]);
+      setAiDescription('');
       spectrumSnapshotsRef.current = [];
       volumeHistoryRef.current = [];
 
@@ -962,6 +966,83 @@ function App() {
     );
   };
 
+  const generateAIDescription = async () => {
+    if (!geminiApiKey) {
+      alert('Please enter your Gemini API key first.');
+      return;
+    }
+
+    if (detections.length === 0) {
+      alert('No audio data to analyze. Please record a session first.');
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    setAiDescription('');
+
+    try {
+      // Prepare data for Gemini
+      const soundSummary = frequentSounds.map(s => 
+        `${s.sound}: detected ${s.count} times, avg confidence ${s.avgConfidence.toFixed(1)}%, avg volume ${s.avgVolume.toFixed(1)}dB, avg frequency ${s.avgFrequency.toFixed(0)}Hz`
+      ).join('\n');
+
+      const volumes = volumeHistoryRef.current.length > 0 ? volumeHistoryRef.current : [0];
+      const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+      const peakVolume = Math.max(...volumes);
+      
+      const prompt = `You are an expert audio analyst. Analyze this acoustic environment recording and provide a detailed, professional description.
+
+Recording Duration: ${recordingTime} seconds
+Selected Labels: ${selectedLabels.join(', ') || 'None'}
+User Notes: ${userNotes || 'None'}
+
+Detected Sounds:
+${soundSummary}
+
+Acoustic Metrics:
+- Average Volume: ${(avgVolume * 100).toFixed(1)}dB
+- Peak Volume: ${(peakVolume * 100).toFixed(1)}dB
+- Total unique sounds detected: ${frequentSounds.length}
+- Total detection events: ${detections.length}
+
+Please provide:
+1. A comprehensive description of the acoustic environment
+2. Identification of the primary sound sources and their characteristics
+3. Analysis of the acoustic scene complexity and activity level
+4. Any notable patterns or relationships between detected sounds
+5. Contextual interpretation of what this environment likely represents
+
+Write in a professional, detailed manner suitable for acoustic research documentation.`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }]
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Gemini API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const description = data.candidates[0]?.content?.parts[0]?.text || 'No description generated.';
+      setAiDescription(description);
+    } catch (error) {
+      console.error('Error generating AI description:', error);
+      alert(`Failed to generate AI description: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
   const saveSession = () => {
     if (detections.length === 0) {
       alert('No data to save. Please record a session first.');
@@ -1304,6 +1385,38 @@ function App() {
                     />
                   </div>
                 )}
+                
+                {/* AI-Enhanced Description Section */}
+                <div className="ai-section">
+                  <h3 className="ai-title">🤖 AI-Enhanced Scene Description</h3>
+                  <div className="ai-controls">
+                    <input
+                      type="password"
+                      className="gemini-api-input"
+                      placeholder="Enter your Gemini API key..."
+                      value={geminiApiKey}
+                      onChange={(e) => setGeminiApiKey(e.target.value)}
+                    />
+                    <button
+                      className="generate-ai-button"
+                      onClick={generateAIDescription}
+                      disabled={isGeneratingAI || detections.length === 0}
+                    >
+                      {isGeneratingAI ? '⏳ Generating...' : '✨ Generate AI Description'}
+                    </button>
+                  </div>
+                  {aiDescription && (
+                    <div className="ai-description">
+                      <pre className="ai-text">{aiDescription}</pre>
+                    </div>
+                  )}
+                  {!geminiApiKey && (
+                    <p className="ai-hint">
+                      💡 Get a free API key at <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
+                    </p>
+                  )}
+                </div>
+                
                 <pre className="summary-text">{summary}</pre>
               </>
             ) : (
