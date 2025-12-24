@@ -45,9 +45,14 @@ function App() {
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [isLabelToolbarExpanded, setIsLabelToolbarExpanded] = useState<boolean>(false);
-  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('AIzaSyBtYpi0lFRYJ386ockH1gY0Xk840Weal3U');
   const [aiDescription, setAiDescription] = useState<string>('');
   const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
+  const [aiCountdown, setAiCountdown] = useState<number>(0);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
+  const [isProcessingFile, setIsProcessingFile] = useState<boolean>(false);
+  const [fileProgress, setFileProgress] = useState<number>(0);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -68,14 +73,19 @@ function App() {
       try {
         setStatus('loading');
         setError('');
+        console.log('Initializing TensorFlow.js...');
         await tf.ready();
+        console.log('TensorFlow.js ready. Backend:', tf.getBackend());
         
         // Load YAMNet model from TensorFlow Hub
+        console.log('Loading YAMNet model...');
         const MODEL_URL = 'https://tfhub.dev/google/tfjs-model/yamnet/tfjs/1';
         const loadedModel = await tf.loadGraphModel(MODEL_URL, { fromTFHub: true });
         setModel(loadedModel);
+        console.log('YAMNet model loaded successfully');
         
         // Load class names
+        console.log('Loading class names...');
         const CLASS_NAMES_URL = 'https://raw.githubusercontent.com/tensorflow/models/master/research/audioset/yamnet/yamnet_class_map.csv';
         const response = await fetch(CLASS_NAMES_URL);
         const csvText = await response.text();
@@ -92,7 +102,8 @@ function App() {
         setStatus('idle');
       } catch (err) {
         console.error('Error loading model:', err);
-        setError('Failed to load YAMNet model. Please refresh the page.');
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        setError(`Failed to load YAMNet model: ${errorMessage}. Please check your internet connection and refresh the page.`);
         setStatus('error');
       }
     };
@@ -259,6 +270,225 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // File upload handlers
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      processAudioFile(file);
+    }
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragOver(false);
+    
+    const file = event.dataTransfer.files[0];
+    if (file && file.type.startsWith('audio/')) {
+      processAudioFile(file);
+    } else {
+      setError('Please drop an audio file (mp3, wav, m4a, etc.)');
+    }
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const processAudioFile = async (file: File) => {
+    if (!model || !classNames.length) {
+      setError('Model not loaded yet');
+      return;
+    }
+
+    try {
+      setIsProcessingFile(true);
+      setFileProgress(0);
+      setUploadedFile(file);
+      setDetections([]);
+      setAiDescription('');
+      setAiCountdown(0);
+      volumeHistoryRef.current = [];
+      spectrumSnapshotsRef.current = [];
+      
+      setStatus('loading');
+      setError('');
+
+      // Read file as ArrayBuffer
+      const arrayBuffer = await file.arrayBuffer();
+      
+      // Create audio context for decoding
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      
+      console.log('Audio file loaded:', {
+        duration: audioBuffer.duration,
+        sampleRate: audioBuffer.sampleRate,
+        channels: audioBuffer.numberOfChannels
+      });
+
+      // Get audio data (convert to mono if stereo)
+      let audioData: Float32Array;
+      if (audioBuffer.numberOfChannels === 1) {
+        audioData = audioBuffer.getChannelData(0);
+      } else {
+        // Mix down to mono
+        const left = audioBuffer.getChannelData(0);
+        const right = audioBuffer.getChannelData(1);
+        audioData = new Float32Array(left.length);
+        for (let i = 0; i < left.length; i++) {
+          audioData[i] = (left[i] + right[i]) / 2;
+        }
+      }
+
+      // Process audio in chunks (same as live processing)
+      const SAMPLE_RATE = 16000;
+      const CHUNK_SIZE = SAMPLE_RATE; // 1 second chunks
+      const numChunks = Math.floor(audioData.length / CHUNK_SIZE);
+      
+      setStatus('listening');
+      startTimeRef.current = Date.now();
+      
+      // Start timer
+      timerIntervalRef.current = setInterval(() => {
+        if (startTimeRef.current) {
+          const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+          setRecordingTime(elapsed);
+        }
+      }, 1000);
+
+      const detectedSounds: Detection[] = [];
+
+      for (let i = 0; i < numChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, audioData.length);
+        const chunk = audioData.slice(start, end);
+
+        // Calculate volume for this chunk
+        const rms = Math.sqrt(chunk.reduce((sum, val) => sum + val * val, 0) / chunk.length);
+        const volume = Math.min(100, rms * 100);
+        volumeHistoryRef.current.push(volume);
+
+        // Calculate frequency spectrum
+        const fftSize = 2048;
+        const fftData = new Float32Array(fftSize);
+        fftData.set(chunk.slice(0, fftSize));
+        
+        // Simple FFT approximation for visualization
+        const spectrum = new Uint8Array(128);
+        for (let j = 0; j < 128; j++) {
+          spectrum[j] = Math.min(255, Math.abs(fftData[j * 16]) * 255);
+        }
+        spectrumSnapshotsRef.current.push(spectrum);
+        setSpectrumData(Array.from(spectrum));
+
+        // Process through YAMNet
+        const waveformTensor = tf.tensor(chunk).expandDims(0);
+        const result = model.predict(waveformTensor) as tf.Tensor;
+        const scores = await result.data();
+        waveformTensor.dispose();
+        result.dispose();
+
+        // Get top prediction
+        let maxScore = -1;
+        let maxIndex = -1;
+        for (let j = 0; j < scores.length; j++) {
+          if (scores[j] > maxScore) {
+            maxScore = scores[j];
+            maxIndex = j;
+          }
+        }
+
+        if (maxScore > 0.2 && maxIndex !== -1) {
+          const detection: Detection = {
+            id: `${Date.now()}-${i}`,
+            label: classNames[maxIndex],
+            score: maxScore,
+            timestamp: new Date(Date.now() - ((numChunks - i) * 1000)),
+            volume: volume,
+            dominantFrequency: calculateDominantFrequency(spectrum)
+          };
+          detectedSounds.push(detection);
+          setDetections(prev => [...prev, detection]);
+        }
+
+        // Update progress
+        setFileProgress(Math.round(((i + 1) / numChunks) * 100));
+      }
+
+      // Finish processing
+      setStatus('idle');
+      setIsProcessingFile(false);
+      
+      // Calculate frequent sounds
+      if (detectedSounds.length > 0) {
+        const soundCounts = new Map<string, { count: number; totalConfidence: number; totalVolume: number; totalFrequency: number }>();
+        
+        detectedSounds.forEach(d => {
+          if (!soundCounts.has(d.label)) {
+            soundCounts.set(d.label, { count: 0, totalConfidence: 0, totalVolume: 0, totalFrequency: 0 });
+          }
+          const stats = soundCounts.get(d.label)!;
+          stats.count++;
+          stats.totalConfidence += d.score;
+          stats.totalVolume += d.volume;
+          stats.totalFrequency += d.dominantFrequency;
+        });
+
+        const frequent = Array.from(soundCounts.entries())
+          .map(([sound, stats]) => ({
+            sound,
+            count: stats.count,
+            avgConfidence: stats.totalConfidence / stats.count,
+            avgVolume: stats.totalVolume / stats.count,
+            avgFrequency: stats.totalFrequency / stats.count
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10);
+
+        setFrequentSounds(frequent);
+
+        // Auto-generate AI description after 2 seconds
+        setTimeout(() => {
+          if (detectedSounds.length > 0) {
+            setAiCountdown(60);
+          }
+        }, 2000);
+      }
+
+      await audioContext.close();
+
+    } catch (err) {
+      console.error('Error processing audio file:', err);
+      setError(`Failed to process audio file: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setStatus('idle');
+      setIsProcessingFile(false);
+    } finally {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    }
+  };
+
+  const calculateDominantFrequency = (spectrum: Uint8Array): number => {
+    let maxValue = 0;
+    let maxIndex = 0;
+    for (let i = 0; i < spectrum.length; i++) {
+      if (spectrum[i] > maxValue) {
+        maxValue = spectrum[i];
+        maxIndex = i;
+      }
+    }
+    // Map index to frequency (100Hz - 10kHz range)
+    return 100 + (maxIndex / spectrum.length) * 9900;
+  };
+
   const startListening = async () => {
     if (!model || !classNames.length) {
       setError('Model not loaded yet');
@@ -277,6 +507,7 @@ function App() {
       setUserNotes('');
       setSelectedLabels([]);
       setAiDescription('');
+      setAiCountdown(0);
       spectrumSnapshotsRef.current = [];
       volumeHistoryRef.current = [];
 
@@ -841,7 +1072,7 @@ function App() {
     setSummary(summaryText);
   };
 
-  const stopListening = () => {
+  const stopListening = async () => {
     // Stop listening flag
     isListeningRef.current = false;
     
@@ -944,6 +1175,21 @@ function App() {
     setRecordingTime(0);
     setStatus('idle');
     console.log('Audio capture stopped');
+    
+    // Start 10-second countdown before generating AI description (only if we have detections)
+    if (detections.length > 0) {
+      setAiCountdown(10);
+      const countdownInterval = setInterval(() => {
+        setAiCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            generateAIDescription();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
   };
 
   const toggleCategory = (categoryKey: string) => {
@@ -990,7 +1236,7 @@ function App() {
       const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
       const peakVolume = Math.max(...volumes);
       
-      const prompt = `You are an expert audio analyst. Analyze this acoustic environment recording and provide a detailed, professional description.
+      const prompt = `You are an expert audio analyst. Analyze this acoustic environment recording and provide a structured, professional analysis.
 
 Recording Duration: ${recordingTime} seconds
 Selected Labels: ${selectedLabels.join(', ') || 'None'}
@@ -1005,16 +1251,41 @@ Acoustic Metrics:
 - Total unique sounds detected: ${frequentSounds.length}
 - Total detection events: ${detections.length}
 
-Please provide:
-1. A comprehensive description of the acoustic environment
-2. Identification of the primary sound sources and their characteristics
-3. Analysis of the acoustic scene complexity and activity level
-4. Any notable patterns or relationships between detected sounds
-5. Contextual interpretation of what this environment likely represents
+Please provide your analysis using EXACTLY these categories and format:
 
-Write in a professional, detailed manner suitable for acoustic research documentation.`;
+**1. Environment Classification:**
+[Classify the environment type: indoor/outdoor, specific location type like office, street, home, etc.]
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+**2. Main Background Noise Classification:**
+[Identify and describe the primary background noise characteristics]
+
+**3. Noise Level Assessment:**
+[Analyze the overall noise level: quiet/moderate/loud, with dB reference]
+
+**4. Speech Detection Level and Frequency:**
+[Report if speech was detected, its frequency, clarity, and characteristics]
+
+**5. Dominant Frequency Ranges:**
+[Describe which frequency bands (low/mid/high) are most active and their characteristics]
+
+**6. Sound Source Count:**
+[Count and categorize the distinct sound sources detected]
+
+**7. Acoustic Complexity:**
+[Rate the scene complexity: simple/moderate/complex, and explain why]
+
+**8. Temporal Patterns:**
+[Describe patterns: continuous, intermittent, rhythmic, or random]
+
+**9. Reverberation/Room Characteristics:**
+[Analyze room acoustics, size indicators, indoor/outdoor characteristics]
+
+**10. Signal-to-Noise Ratio:**
+[Assess the clarity of primary sounds versus background noise]
+
+Keep each section concise but informative, suitable for acoustic research documentation.`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1029,15 +1300,23 @@ Write in a professional, detailed manner suitable for acoustic research document
       });
 
       if (!response.ok) {
-        throw new Error(`Gemini API error: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error?.message || response.statusText;
+        throw new Error(`Gemini API error (${response.status}): ${errorMessage}`);
       }
 
       const data = await response.json();
+      
+      if (!data.candidates || !data.candidates[0]) {
+        throw new Error('No response from Gemini API. Please check your API key and try again.');
+      }
+      
       const description = data.candidates[0]?.content?.parts[0]?.text || 'No description generated.';
       setAiDescription(description);
     } catch (error) {
       console.error('Error generating AI description:', error);
-      alert(`Failed to generate AI description: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to generate AI description: ${errorMsg}\n\nPlease check:\n1. Your API key is correct\n2. You have enabled the Gemini API in Google Cloud Console\n3. Your API key has permission to use Gemini API`);
     } finally {
       setIsGeneratingAI(false);
     }
@@ -1092,6 +1371,7 @@ Write in a professional, detailed manner suitable for acoustic research document
         timestamp: d.timestamp.toISOString()
       })),
       summary: summary,
+      aiAnalysis: aiDescription || 'AI analysis not generated',
       frequencySpectrum: spectrumData.length > 0 ? {
         available: true,
         description: 'Averaged frequency spectrum from 100Hz to 10kHz (128 bins)',
@@ -1180,7 +1460,7 @@ Write in a professional, detailed manner suitable for acoustic research document
         <button
           className="start-button"
           onClick={startListening}
-          disabled={status === 'loading' || status === 'listening' || !model}
+          disabled={status === 'loading' || status === 'listening' || !model || isProcessingFile}
         >
           Start Listening
         </button>
@@ -1196,6 +1476,53 @@ Write in a professional, detailed manner suitable for acoustic research document
             ⏱️ {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
           </div>
         )}
+        
+        {/* File Upload Drag & Drop Area */}
+        <div 
+          className={`file-upload-area ${isDragOver ? 'drag-over' : ''} ${isProcessingFile ? 'processing' : ''}`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onClick={() => !isProcessingFile && document.getElementById('file-input')?.click()}
+        >
+          <input
+            id="file-input"
+            type="file"
+            accept="audio/*"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+            disabled={isProcessingFile || status === 'listening'}
+          />
+          {isProcessingFile ? (
+            <div className="upload-content">
+              <div className="upload-icon processing">⏳</div>
+              <div className="upload-text">
+                <strong>Processing: {uploadedFile?.name}</strong>
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: `${fileProgress}%` }}></div>
+                </div>
+                <span>{fileProgress}% complete</span>
+              </div>
+            </div>
+          ) : uploadedFile && !isProcessingFile && detections.length > 0 ? (
+            <div className="upload-content">
+              <div className="upload-icon success">✅</div>
+              <div className="upload-text">
+                <strong>{uploadedFile.name}</strong>
+                <span>Analysis complete!</span>
+              </div>
+            </div>
+          ) : (
+            <div className="upload-content">
+              <div className="upload-icon">📁</div>
+              <div className="upload-text">
+                <strong>Drag & Drop Audio File</strong>
+                <span>or click to browse</span>
+                <span className="file-types">MP3, WAV, M4A, OGG</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Label Toolbar - Always Visible */}
@@ -1389,6 +1716,13 @@ Write in a professional, detailed manner suitable for acoustic research document
                 {/* AI-Enhanced Description Section */}
                 <div className="ai-section">
                   <h3 className="ai-title">🤖 AI-Enhanced Scene Description</h3>
+                  
+                  {aiCountdown > 0 && (
+                    <div className="ai-countdown">
+                      <p>⏱️ Generating AI analysis in {aiCountdown} seconds...</p>
+                    </div>
+                  )}
+                  
                   <div className="ai-controls">
                     <input
                       type="password"
@@ -1400,9 +1734,9 @@ Write in a professional, detailed manner suitable for acoustic research document
                     <button
                       className="generate-ai-button"
                       onClick={generateAIDescription}
-                      disabled={isGeneratingAI || detections.length === 0}
+                      disabled={isGeneratingAI || detections.length === 0 || aiCountdown > 0}
                     >
-                      {isGeneratingAI ? '⏳ Generating...' : '✨ Generate AI Description'}
+                      {isGeneratingAI ? '⏳ Generating...' : aiCountdown > 0 ? `⏱️ Wait ${aiCountdown}s` : '✨ Generate AI Description'}
                     </button>
                   </div>
                   {aiDescription && (
