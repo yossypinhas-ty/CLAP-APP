@@ -274,6 +274,7 @@ function App() {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setUploadedFile(file); // Show filename immediately
       processAudioFile(file);
     }
   };
@@ -284,6 +285,7 @@ function App() {
     
     const file = event.dataTransfer.files[0];
     if (file && file.type.startsWith('audio/')) {
+      setUploadedFile(file); // Show filename immediately
       processAudioFile(file);
     } else {
       setError('Please drop an audio file (mp3, wav, m4a, etc.)');
@@ -1504,12 +1506,12 @@ Keep each section concise but informative, suitable for acoustic research docume
                 <span>{fileProgress}% complete</span>
               </div>
             </div>
-          ) : uploadedFile && !isProcessingFile && detections.length > 0 ? (
+          ) : uploadedFile ? (
             <div className="upload-content">
               <div className="upload-icon success">✅</div>
               <div className="upload-text">
                 <strong>{uploadedFile.name}</strong>
-                <span>Analysis complete!</span>
+                <span>{detections.length > 0 ? 'Analysis complete!' : 'Ready to process'}</span>
               </div>
             </div>
           ) : (
